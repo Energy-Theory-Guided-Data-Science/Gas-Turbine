@@ -1,1 +1,4 @@
-/Daten/*
+/Data/*
+
+*.log
+*/.ipynb_checkpoints/*
