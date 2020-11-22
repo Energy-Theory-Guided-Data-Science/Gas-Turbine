@@ -1,4 +1,5 @@
 /Data/*
+/Code/Simulink/*
 
 *.log
 */.ipynb_checkpoints/*
