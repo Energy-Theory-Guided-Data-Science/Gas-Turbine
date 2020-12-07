@@ -46,9 +46,11 @@ def openMatfiles():
 	
 # downsample the data for a given sheet based on the Least Traingle Three Buckets algorithm
 # The sample_size has to be given globally
-def downsampleData(time, values, sample_size):
+def downsampleData(time, values, sample_size = 12232):
     assert len(time) == len(values)
     data = np.array([time, values]).T
+    while len(data.shape) != 2:
+        data = data[0]
     downsampled_data = lttb.downsample(data, n_out = sample_size)
     assert downsampled_data.shape[0] == sample_size
     return downsampled_data
@@ -56,7 +58,7 @@ def downsampleData(time, values, sample_size):
 
 # downsample all columns of a given data sheet
 # it is neccessary to know the head of the time column
-def downsampleSheet(sheet, time_head, sample_size):
+def downsampleSheet(sheet, time_head, sample_size = 12232):
     data_down = {}
     time_downsampled = np.arange(sample_size)
     sheet_time = sheet[time_head]
@@ -72,7 +74,7 @@ def downsampleSheet(sheet, time_head, sample_size):
 	
 	
 # prepare and downsample all sheets given by our expert
-def prepareSheets(raw_data, sample_size):
+def prepareSheets(raw_data, sample_size = 12232):
     data = {}
     switcher_time = {
         'Daten_Test_ID_4b_1B_el': 't_1B_el',
