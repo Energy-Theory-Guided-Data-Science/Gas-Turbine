@@ -4,34 +4,42 @@ import os
 import h5py
 import lttb
 
-OPEN_FOLDER = "../Data/Raw_Data/" # where are the raw matlab files?
-SAVE_FOLDER = "../Data/Temp_Data/" # where do you want to save the .csv files
+def fillData(time_splits, values_splits):
+    time = np.array(range(int(time_splits[-1])))
+    values = np.array(range(int(time_splits[-1])))
+    for i in range(len(time_splits)-1):
+        lower = int(time_splits[i])
+        upper = int(time_splits[i+1])
+        v = values_splits[i]
+        values[lower:upper] = v
+    return time, values
 
 
-def createFolder(foldername):
-	if not os.path.exists(foldername):
-		os.mkdir(foldername)
-		print('Creation of dircetory %s successful.' % foldername)
+def checkFolder(foldername):
+    if not os.path.exists(foldername):
+        os.mkdir(foldername)
+        print('Creation of dircetory %s successful.' % foldername)
+    else:
+        print('Folder already exists.')
 
 def openCSVFile(filename, foldername):
     path = os.path.join(foldername, filename)
     df = pd.read_csv(path, delimiter = "|", encoding = "utf-8")
     return df
-	
-	
-# in case the matlab file has multiple headers, this method has to be executed
-def openFileWithMultipleHeaders(path, mat_file):
-    group_data = {}
-    for head in mat_file.keys():
-        group_data[head] = np.squeeze(mat_file[head][:])
-    return group_data
-	
-	
-	
+
+def downsampleData(time, values, sample_size = 11290):
+    assert len(time) == len(values)
+    data = np.array([time, values]).T
+    while len(data.shape) != 2:
+        data = data[0]
+    downsampled_data = lttb.downsample(data, n_out = sample_size)
+    assert downsampled_data.shape[0] == sample_size
+    return downsampled_data
+
 #import all .matlab-files from data folder
-def openMatfiles():
+def openMatfiles(OPEN_FOLDER):
     raw_data = {}
-    mat_raw_files = (file for file in os.listdir(OPEN_FOLDER) if file[-4:] == '.mat' and "_Test_" in file)
+    mat_raw_files = (file for file in os.listdir(OPEN_FOLDER) if file[-4:] == '.mat' and "daten_Test_" in file)
     for file in mat_raw_files:
         print(file)
         path = os.path.join(OPEN_FOLDER, file)
@@ -42,53 +50,10 @@ def openMatfiles():
             group_data = mat_file[:]
         raw_data[file[:-4]] = group_data
     return raw_data
-	
-	
-# downsample the data for a given sheet based on the Least Traingle Three Buckets algorithm
-# The sample_size has to be given globally
-def downsampleData(time, values, sample_size = 12232):
-    assert len(time) == len(values)
-    data = np.array([time, values]).T
-    while len(data.shape) != 2:
-        data = data[0]
-    downsampled_data = lttb.downsample(data, n_out = sample_size)
-    assert downsampled_data.shape[0] == sample_size
-    return downsampled_data
 
-
-# downsample all columns of a given data sheet
-# it is neccessary to know the head of the time column
-def downsampleSheet(sheet, time_head, sample_size = 12232):
-    data_down = {}
-    time_downsampled = np.arange(sample_size)
-    sheet_time = sheet[time_head]
-    if 't_2A_el' in time_head:
-        sheet_time = sheet[time_head][::1000]
-        for head in sheet.keys():
-            sheet[head] = sheet[head][::1000]
-    for head in sheet.keys():
-        data_down[head] = downsampleData(sheet_time, sheet[head], sample_size)[:,1]
-        if head == time_head:
-            data_down[head] = time_downsampled
-    return data_down
-	
-	
-# prepare and downsample all sheets given by our expert
-def prepareSheets(raw_data, sample_size = 12232):
-    data = {}
-    switcher_time = {
-        'Daten_Test_ID_4b_1B_el': 't_1B_el',
-        'Daten_Test_ID_4b_1B_th': 't_1B_th',
-        'Daten_Test_ID_4b_2A_el_1': 't_2A_el_1',
-        'Daten_Test_ID_4b_2A_el_2': 't_2A_el_2',
-        'Daten_Test_ID_4b_2A_th': 't_2A_th',
-        'Drehzahldaten_Test_ID_4b': 't_nsoll_stil',
-        'Leistungdaten_Test_ID_4b': 't_elstil'
-    }
-    exclude = ['Drehzahldaten_Test_ID_4b', 'Leistungdaten_Test_ID_4b']
-    for head in [x for x in raw_data.keys() if x not in exclude]:
-        print(head)
-        data[head] = downsampleSheet(raw_data[head], switcher_time.get(head), sample_size)
-    for head in exclude:
-        data[head] = raw_data[head]
-    return data
+# in case the matlab file has multiple headers, this method has to be executed
+def openFileWithMultipleHeaders(path, mat_file):
+    group_data = {}
+    for head in mat_file.keys():
+        group_data[head] = np.squeeze(mat_file[head][:])
+    return group_data
