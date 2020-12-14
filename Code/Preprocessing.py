@@ -27,7 +27,7 @@ def openCSVFile(filename, foldername):
     df = pd.read_csv(path, delimiter = "|", encoding = "utf-8")
     return df
 
-def downsampleData(time, values, sample_size = 11290):
+def downsampleData(time, values, sample_size = 12232):
     assert len(time) == len(values)
     data = np.array([time, values]).T
     while len(data.shape) != 2:
