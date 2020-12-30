@@ -14,6 +14,19 @@ def fillData(time_splits, values_splits):
         values[lower:upper] = v
     return time, values
 
+def applyConstraint(time_splits, values_splits, m = 2.16):
+    time = np.array(range(int(time_splits[-1])))
+    values = np.array(range(int(time_splits[-1])))
+    for i in range(len(time_splits)-1):
+        lower = int(time_splits[i])
+        upper = int(time_splits[i+1])
+        v_low = values_splits[i]
+        v_up = values_splits[i+1]
+        slope = min(m, (v_up - v_low)/(upper-lower))
+        for t in range(upper-lower):
+            values[lower + t] = v_low + slope *t
+    return time, values
+
 
 def checkFolder(foldername):
     if not os.path.exists(foldername):
