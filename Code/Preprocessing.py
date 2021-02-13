@@ -3,6 +3,23 @@ import numpy as np
 import os
 import h5py
 import lttb
+from sklearn import metrics
+
+def getColor(color):
+    switcher = {
+        'green' : '#009682',
+        'blue' : '#4664AA',
+        'orange' : '#DF9B1B',
+        'lightgreen': '#77A200',
+        'yellow': '#FCE500',
+        'red': '#A22223',
+        'purple': '#A3107C',
+        'brown': '#A7822E',
+        'cyan': '#079EDE',
+        'black': '#000000',
+        'grey': '#666666',
+    }
+    return switcher.get(color, 'The currently allowed colors are green, blue, orange, lightgreen, yellow, red, purple, brown and cyan.')
 
 def fillData(time_splits, values_splits):
     time = np.array(range(int(time_splits[-1])))
@@ -22,7 +39,7 @@ def applyConstraint(time_splits, values_splits, m = 2.16):
         upper = int(time_splits[i+1])
         v_low = values_splits[i]
         v_up = values_splits[i+1]
-        slope = min(m, (v_up - v_low)/(upper-lower))
+        slope = min(m, ((v_up - v_low)/(upper-lower)))
         for t in range(upper-lower):
             values[lower + t] = v_low + slope *t
     return time, values
@@ -31,7 +48,7 @@ def applyConstraint(time_splits, values_splits, m = 2.16):
 def checkFolder(foldername):
     if not os.path.exists(foldername):
         os.mkdir(foldername)
-        print('Creation of dircetory %s successful.' % foldername)
+        print('Creation of directory %s successful.' % foldername)
     else:
         print('Folder already exists.')
 
@@ -70,3 +87,32 @@ def openFileWithMultipleHeaders(path, mat_file):
     for head in mat_file.keys():
         group_data[head] = np.squeeze(mat_file[head][:])
     return group_data
+
+def measureDifference(data, value_header, approx_header):
+    R_SQUARED = True
+    RSME = True
+    AIC = False
+    MAE = True
+    MaxAE = True
+    
+    data = data[data[approx_header].notnull()]
+    values = data[value_header]
+    approx = data[approx_header]
+    
+    if RSME:
+        rms = metrics.mean_squared_error(values, approx, squared=False)
+        print('The RMSE is %5.3f' %rms)
+    if R_SQUARED:
+        r2 = metrics.r2_score(values, approx)
+        print('The R2-score is %5.3f' %r2)
+    if MAE:
+        mae = metrics.mean_absolute_error(values, approx)
+        print('The MAE is %5.3f' %mae)
+    if MaxAE:
+        maxae = metrics.max_error(values, approx)
+        print('The MaxAE is %5.3f' %maxae)
+    if AIC:
+        resid = approx - values
+        sse = sum(resid**2)
+        aic = 2-2*np.log(sse)
+        print('The AIC is %5.3f' %aic)
