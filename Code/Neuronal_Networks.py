@@ -1,74 +1,90 @@
+################################################################################
+######################## Import of libraries ###################################
+################################################################################
+# import own libraries
+import Data_Processing as dp
+import Global_Functions as gf
+# import python libraries
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+import math
+# import tensorflow
 from tensorflow.keras import layers
 from keras.models import Sequential
 from keras.callbacks import EarlyStopping
 
-def scale(data_series, scaler = None):
-    data = data_series.values
-    data = data.reshape(-1, 1)
-    if scaler is None:
-        scaler = MinMaxScaler(feature_range = (-1,1), )
-        scaler = scaler.fit(data)
-    data_scaled = scaler.transform(data)
-    return data_scaled, scaler
 
-def prepare_data(data, lag_input = 1, lag_output = 1, all_lags = True, differences = 'none', hybrid = False):
-    length = len(data)
-    input_scaled, scaler_input = scale(data['input_voltage'])
-    power_scaled, scaler_power = scale(data['el_power'])
-    
-    scaler = [scaler_input, scaler_power]
-    
-    input_scaled = [x[0] for x in input_scaled]
-    power_scaled = [x[0] for x in power_scaled]
-    
-    input_scaled = np.append(input_scaled, np.full(lag_input, -1))
-    power_scaled = np.append(power_scaled, np.full(lag_output, -1))
-    
-    df = pd.DataFrame()
-    
-    for i in range(lag_input):
-        df['input_voltage_delay_' + str(i)] = np.roll(input_scaled, i)[:length]
-    
-    for j in range(lag_output):
-        df['el_power_delay_' + str(j)] = np.roll(power_scaled, i)[:length]
-    
-    y = df[['el_power_delay_0']]
-    
-    if all_lags:
-        X = df.filter(regex = ("input_voltage_delay_.*"))
-    else:
-        X = df[['input_voltage_delay_0', 'input_voltage_delay_' +str(lag_input-1)]]
-        
-    if differences == 'add':
-        X['difference'] = data.diff(lag_input)['el_power']
-        X['difference'][:lag_input] = 0
-    elif differences == 'only':
-        diffs = data.diff(lag_input)['el_power']
-        diffs[:lag_input] = 0
-        X = pd.DataFrame(diffs)
-	
-    if hybrid:
-        theor_preds_scaled, scaler_theor = scale(data['theor_predictions'])
-        scaler.append(scaler_theor)
-        X['theor_pred'] = theor_preds_scaled
-	
-    X = X.values
-    X = X.reshape(X.shape[0], 1, X.shape[1])
-    
-    return scaler, X, y
-	
-def fit_lstm(X_train, y_train, X_val, y_val, batch_size, nb_epochs, neurons):    
-    es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = 10)
+def generate_batches(X, y, batch_size = 1):
+    i = 0
+    while True:
+        X_batch = []
+        y_batch = []
+        for b in range(batch_size):
+            if i >= len(X):
+                i = np.random.randint(len(X))
+            X_point = X[i, :]
+            y_point = y[i, :]
+            i += 1
+            
+            X_batch.append(X_point)
+            y_batch.append(y_point)
+        yield (np.array(X_batch), np.array(y_batch))
+
+
+def fit_lstm(X_train, y_train, X_val, y_val, batch_size, nb_epochs, neurons, loss_function = 'mean_squared_error', out_of_last_layer = 2):
+    steps_per_epoch = int(math.floor((1. * len(X_train)) / batch_size))
+    val_steps = int(math.floor((1. * len(X_val)) / batch_size))    
     history = list()
 
     model = Sequential()
-    model.add(layers.LSTM(neurons, batch_input_shape = (batch_size, X_train.shape[1], X_train.shape[2]), stateful = True))
-    model.add(layers.Dense(1))
-    model.compile(loss = 'mean_squared_error', optimizer = 'adam', )
+    model.add(layers.LSTM(int(neurons/2), batch_input_shape = (batch_size, X_train.shape[1], X_train.shape[2]), stateful = True, return_sequences = True, kernel_regularizer = 'l2'))
+    model.add(layers.LSTM(neurons, stateful = True, kernel_regularizer = 'l2'))
+    model.add(layers.Dense(neurons, kernel_regularizer = 'l2'))
+    model.add(layers.Dense(out_of_last_layer, kernel_regularizer = 'l2'))
+    model.compile(loss = loss_function, optimizer = 'adam', )
     for i in range(nb_epochs):
-        history.append(model.fit(X_train, y_train, validation_data = (X_val, y_val), epochs = 1, batch_size = batch_size, verbose = 1, shuffle = False, callbacks = [es]))
+        history.append(model.fit(generate_batches(X_train, y_train, batch_size = batch_size), validation_data = generate_batches(X_val, y_val, batch_size = batch_size), validation_steps = val_steps, epochs = 1, steps_per_epoch = steps_per_epoch, verbose = 0, shuffle = False))
         model.reset_states()
+        if i % 10 == 9:
+            print('Epoch {} done.'.format(str(i+1)))
     return model, history
+
+# prepare data of train and validation data frame based on the chosen parameters.
+# The preparation for this file follows the specification of 'add' for differences. Please refer to the function 'prepare_data' in the file 'Data_Processing' for more information.
+def train_model(experiment_train, experiment_validation, difference_chosen = None,
+                loss_function = 'mean_squared_error',
+                save_folder = "../Models/", all_lags = False, hybrid = False,
+                lag_chosen=60, batch_size = 1, nmb_epochs=20, neurons_chosen=64):
+    gf.check_folder(save_folder)
+    # prepare data with the method in the utility file 'Data Preprocessing'
+    scaler_train, X_train, y_train = dp.prepare_data(experiment_train,
+                                                     lag = lag_chosen, all_lags = all_lags,
+                                                     differences = difference_chosen, hybrid = hybrid)
+    scaler_val, X_val, y_val = dp.prepare_data(experiment_validation,
+                                                lag = lag_chosen, all_lags = all_lags,
+                                               differences = difference_chosen, hybrid = hybrid)
+    # train the model using the function above
+    model, history = fit_lstm(X_train, y_train, X_val, y_val,
+                                 loss_function = loss_function,
+                                 batch_size = batch_size,
+                                 nb_epochs = nmb_epochs,
+                                 neurons = neurons_chosen,
+                                 out_of_last_layer = y_train.shape[2])
+    model.save(save_folder + 'model.h5')
+
+    return model, history, scaler_train, X_train, y_train, scaler_val, X_val, y_val
+
+
+# Predict the values given an experiment and a corresponding model
+def predictions(experiment, model, difference_chosen,
+                all_lags = False, hybrid = False, lag_chosen = 60, batch_size = 1):
+    # prepare data with the method in the utility file 'Data Preprocessing'
+    scaler, X, y = dp.prepare_data(experiment, lag = lag_chosen, all_lags = all_lags,
+                                   differences = difference_chosen, hybrid = hybrid)
+    
+    y = [[i[0][0]] for i in y]
+    steps = int(math.floor((1. * len(X)) / batch_size))
+    preds_scaled = model.predict(X[:steps*batch_size], batch_size = batch_size)
+    preds = scaler[1].inverse_transform(preds_scaled) # scaler[1] is the electric power scaler, adapt if neccessary.
+    
+    return scaler, X, y, preds_scaled, preds
