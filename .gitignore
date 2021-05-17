@@ -2,6 +2,7 @@
 /Code/Simulink/*
 /OLD/*
 /Images/*
+/Models/*
 
 *.log
 */.ipynb_checkpoints/*
