@@ -35,18 +35,18 @@ def fit_lstm(X_train, y_train, X_val, y_val, batch_size, nb_epochs, neurons, los
     steps_per_epoch = int(math.floor((1. * len(X_train)) / batch_size))
     val_steps = int(math.floor((1. * len(X_val)) / batch_size))    
     history = list()
-
+    
     model = Sequential()
     model.add(layers.LSTM(int(neurons/2), batch_input_shape = (batch_size, X_train.shape[1], X_train.shape[2]), stateful = True, return_sequences = True, kernel_regularizer = 'l2'))
-    model.add(layers.LSTM(neurons, stateful = True, kernel_regularizer = 'l2'))
-    model.add(layers.Dense(neurons, kernel_regularizer = 'l2'))
+    model.add(layers.Dense(int(neurons/2), kernel_regularizer = 'l2'))
     model.add(layers.Dense(out_of_last_layer, kernel_regularizer = 'l2'))
     model.compile(loss = loss_function, optimizer = 'adam', )
+    
     for i in range(nb_epochs):
         history.append(model.fit(generate_batches(X_train, y_train, batch_size = batch_size), validation_data = generate_batches(X_val, y_val, batch_size = batch_size), validation_steps = val_steps, epochs = 1, steps_per_epoch = steps_per_epoch, verbose = 0, shuffle = False))
         model.reset_states()
         if i % 10 == 9:
-            print('Epoch {} done.'.format(str(i+1)))
+            print('Epoch {} of {} is done.'.format(str(i+1), nb_epochs))
     return model, history
 
 # prepare data of train and validation data frame based on the chosen parameters.
@@ -82,9 +82,11 @@ def predictions(experiment, model, difference_chosen,
     scaler, X, y = dp.prepare_data(experiment, lag = lag_chosen, all_lags = all_lags,
                                    differences = difference_chosen, hybrid = hybrid)
     
-    y = [[i[0][0]] for i in y]
+    y = np.array([i[0][0] for i in y])
     steps = int(math.floor((1. * len(X)) / batch_size))
     preds_scaled = model.predict(X[:steps*batch_size], batch_size = batch_size)
+    preds_scaled = np.array([i[0] for i in preds_scaled])
     preds = scaler[1].inverse_transform(preds_scaled) # scaler[1] is the electric power scaler, adapt if neccessary.
+    preds = np.array([i[0] for i in preds])
     
     return scaler, X, y, preds_scaled, preds
