@@ -92,7 +92,7 @@ def prepare_data(data, lag = 60, all_lags = True,
         y['diff'] = diffs_scaled
         scaler.append(scaler_diffs)
     elif differences == 'input':
-        X['input_difference'] = data.diff(lag)['input_voltage']
+        X['input_difference'] = df['input_voltage_delay_' + str(lag -1)] - df['input_voltage_delay_0']
         X['input_difference'][:lag] = 0
     
     # reshape input values to follow LSTM tutorial

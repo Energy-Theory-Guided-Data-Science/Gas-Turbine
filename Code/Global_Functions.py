@@ -59,6 +59,7 @@ def load_synthetic(open_folder, length = None):
 
 # create plot of two lines and save it to a specified image_folder. The lines stand for the true values and the predictions of the model respectively.
 def create_prediction_plot(true_values, predictions, image_folder, title = "", specs = ""):
+    check_folder(image_folder)
     fig = plt.figure(figsize = (15,10))
     plt.plot(true_values, color = get_color("grey"), label = "True")
     plt.plot(predictions, color = get_color("green"), label = "Predictions")
@@ -68,12 +69,45 @@ def create_prediction_plot(true_values, predictions, image_folder, title = "", s
     plt.title(title + specs, fontsize = 25)
     fig.tight_layout()
     plt.show()
-    fig.savefig(image_folder + specs + "predictions.png")
-    fig.savefig(image_folder + specs + "predictions.svg")
+    fig.savefig(image_folder + specs + "_predictions.png")
+    fig.savefig(image_folder + specs + "_predictions.svg")
+
+# measure the ends of the transitions for a given epsilon and a given difference (delta) for a column.
+def get_ends(col, delta = 60, epsilon = 10):
+    end_splits = list()
+    first = True
+    for x in range(delta, len(col)):
+        part = col[x-delta:x]
+        part_mean = np.mean(part)
+        if 0-epsilon <= part_mean <= 0+epsilon:
+            if first:
+                end_splits.append(x-delta)
+                first = False
+        elif part_mean < -3*epsilon or part_mean > 3*epsilon:
+            first = True
+    return end_splits
+
+# for a given data frame get the beginning and end splits for each transition.
+def get_transition_times(df, delta = 60, epsilon = 10):
+    input_splits = [x for x in range(len(df)-1) if df.iloc[x]['input_voltage'] != df.iloc[x+1]['input_voltage']]
+    df['el_power_delay'] = np.roll(df['el_power'], delta)[:len(data)]
+    df['diff_el_power'] = df['el_power_delay'] - df['el_power']
+    df['diff_el_power'][:delta] = 0
+    end_splits = get_ends(df['diff_el_power'], delta, epsilon)
+    
+    splits = list()
+    for i in range(len(input_splits)):
+        current_end_splits = end_splits > input_splits[i-1] and end_splits < input_splits[i]
+        current_end_splits = end_splits[current_end_splits]
+        splits.append((input_splits[i], current_end_splits))
+    
+    splits.append((input_splits[-1], end_splits[end_splits > input_splits[-1]]))
+    
+    return splits
 
 # measure the difference of predictions and approximations. One can specify, which measures to use.
 def measure_difference(true_values, approximations,
-                       R_SQUARED = True, RSME = True, AIC = False,
+                       R_SQUARED = True, RMSE = True, AIC = False,
                        MAE = True, MaxAE = True, should_print = True):
     
     values = true_values[~np.isnan(true_values)]
@@ -86,7 +120,7 @@ def measure_difference(true_values, approximations,
     results = list()
     columns = list()
     
-    if RSME:
+    if RMSE:
         rms = metrics.mean_squared_error(values, approx, squared=False)
         results.append(rms)
         columns.append('RMSE')
@@ -121,6 +155,41 @@ def measure_difference(true_values, approximations,
     df = pd.DataFrame(columns = columns)
     df.loc[0] = results
     return df
+
+# measure the difference of predictions and approximations only on slopes. One can specify, which measures to use.
+def measure_difference_slopes(data_frame, predictions_all, R_SQUARED = True, RMSE = True, AIC = False,
+                       MAE = True, MaxAE = True, should_print = True, lag = 60, epsilon  = 10):
+    splits = get_transition_times(data_frame, delta = lag, epsilon = epsilon)
+    
+    true_slopes = list()
+    predictions_slopes = list()
+    
+    for i in splits:
+        true_slopes.append(data_frame['el_power'][i[0]:i[1]])
+        predictions_slopes.append(predictions_all[i[0]:i[1]])
+    
+    return measure_difference(true_slopes, predictions_slopes,
+                              R_SQUARED = R_SQUARED, RMSE = RMSE, AIC = AIC,
+                               MAE = MAE, MaxAE = MaxAE, should_print = should_print)
+
+
+def save_losses(history, image_folder):
+    losses = []
+    val_losses = []
+    for i in history:
+        losses.append(i.history['loss'])
+        val_losses.append(i.history['val_loss'])
+    
+    losses = np.array(losses)
+    val_losses = np.array(val_losses)
+    
+    np.savetxt(image_folder + '10_losses_history.txt', losses)
+    np.savetxt(image_folder + '11_val_losses_history.txt',val_losses)
+    
+    plt.plot(losses, label = 'loss')
+    plt.plot(val_losses, label = 'val_loss')
+    plt.legend()
+    plt.savefig(image_folder + "12_losses.png")
 
 ################################################################################
 ########################## Mathematical functions ##############################
@@ -157,7 +226,7 @@ def open_file_with_headers(mat_file):
     return group_data
 
 #open a CSV file within our structure
-def open_CSV_file(filename, foldername, sep = "|", enc = "utf-8"):
+def open_CSV_file(filename, foldername = "", sep = "|", enc = "utf-8"):
     path = os.path.join(foldername, filename)
     df = pd.read_csv(path, delimiter = sep, encoding = enc)
     return df

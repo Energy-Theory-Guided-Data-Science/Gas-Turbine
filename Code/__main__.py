@@ -7,9 +7,9 @@ def createFolders():
     open_4b = OPEN_FOLDER + "Messdaten_Test_ID_4b/"
     open_9 = OPEN_FOLDER + "Messdaten_Test_ID_9/"
 
-    pp.checkFolder(SAVE_FOLDER)
-    pp.checkFolder(OPEN_FOLDER)
-    pp.checkFolder(IMAGE_FOLDER)
-    pp.checkFolder(open_1)
-    pp.checkFolder(open_4b)
-    pp.checkFolder(open_9)
+    gf.check_folder(SAVE_FOLDER)
+    gf.check_folder(OPEN_FOLDER)
+    gf.check_folder(IMAGE_FOLDER)
+    gf.check_folder(open_1)
+    gf.check_folder(open_4b)
+    gf.check_folder(open_9)

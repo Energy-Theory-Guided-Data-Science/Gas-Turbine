@@ -33,17 +33,20 @@ def generate_batches(X, y, batch_size = 1):
 
 def fit_lstm(X_train, y_train, X_val, y_val, batch_size, nb_epochs, neurons, loss_function = 'mean_squared_error', out_of_last_layer = 2):
     steps_per_epoch = int(math.floor((1. * len(X_train)) / batch_size))
-    val_steps = int(math.floor((1. * len(X_val)) / batch_size))    
+    val_steps = int(math.floor((1. * len(X_val)) / batch_size))
     history = list()
     
+    es = EarlyStopping(monitor = "val_loss", patience = 25)
+    
     model = Sequential()
-    model.add(layers.LSTM(int(neurons/2), batch_input_shape = (batch_size, X_train.shape[1], X_train.shape[2]), stateful = True, return_sequences = True, kernel_regularizer = 'l2'))
+    model.add(layers.LSTM(neurons, batch_input_shape = (batch_size, X_train.shape[1], X_train.shape[2]), stateful = True, return_sequences = True, kernel_regularizer = 'l2'))
+    #model.add(layers.LSTM(int(neurons/2), return_sequences = True, kernel_regularizer = 'l2'))
     model.add(layers.Dense(int(neurons/2), kernel_regularizer = 'l2'))
     model.add(layers.Dense(out_of_last_layer, kernel_regularizer = 'l2'))
-    model.compile(loss = loss_function, optimizer = 'adam', )
+    model.compile(loss = loss_function, optimizer = 'adagrad', )
     
     for i in range(nb_epochs):
-        history.append(model.fit(generate_batches(X_train, y_train, batch_size = batch_size), validation_data = generate_batches(X_val, y_val, batch_size = batch_size), validation_steps = val_steps, epochs = 1, steps_per_epoch = steps_per_epoch, verbose = 0, shuffle = False))
+        history.append(model.fit(generate_batches(X_train, y_train, batch_size = batch_size), validation_data = generate_batches(X_val, y_val, batch_size = batch_size), validation_steps = val_steps, epochs = 1, steps_per_epoch = steps_per_epoch, verbose = 0, shuffle = False, callbacks = [es]))
         model.reset_states()
         if i % 10 == 9:
             print('Epoch {} of {} is done.'.format(str(i+1), nb_epochs))
