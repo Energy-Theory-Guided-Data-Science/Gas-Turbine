@@ -6,7 +6,10 @@ from sklearn import metrics
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 import h5py
+import re
+import Data_Processing as dp
 
 
 ################################################################################
@@ -46,11 +49,16 @@ def use_multiple_experiments(experiments):
         df = pd.concat([df, df_ex], ignore_index=True)
     return df
 
+def numerical_sort(value):
+    parts = re.compile(r'(\d+)').split(value)
+    parts[1::2] = map(int, parts[1::2])
+    return parts
+
 # load synthetic data sets from folder
 def load_synthetic(open_folder, length = None):
     experiments = []
     for root, dirs, files in os.walk(open_folder):
-        for file in files:
+        for file in sorted(files, key = numerical_sort):
             if file[-4:] == ".csv":
                 experiments.append(open_CSV_file(file, open_folder))
                 if len(experiments) == length:
@@ -58,14 +66,15 @@ def load_synthetic(open_folder, length = None):
     return experiments
 
 # create plot of two lines and save it to a specified image_folder. The lines stand for the true values and the predictions of the model respectively.
-def create_prediction_plot(true_values, predictions, image_folder, title = "", specs = ""):
+def create_prediction_plot(times, true_values, predictions, image_folder, title = "", specs = ""):
     check_folder(image_folder)
     fig = plt.figure(figsize = (15,10))
-    plt.plot(true_values, color = get_color("grey"), label = "True")
-    plt.plot(predictions, color = get_color("green"), label = "Predictions")
+    plt.plot(times, true_values, color = get_color("grey"), label = "True", linewidth = 2)
+    plt.plot(times[:len(predictions)], predictions, color = get_color("green"), label = "Predictions", linewidth = 3)
     plt.ylabel('Electric power [W]', fontsize = 18)
     plt.xlabel('Time [sec]', fontsize = 18)
-    plt.legend()
+    plt.ylim([0, 4050])
+    plt.legend(fontsize = 16)
     plt.title(title + specs, fontsize = 25)
     fig.tight_layout()
     plt.show()
@@ -174,6 +183,7 @@ def measure_difference_slopes(data_frame, predictions_all, R_SQUARED = True, RMS
 
 
 def save_losses(history, image_folder):
+    check_folder(image_folder)
     losses = []
     val_losses = []
     for i in history:
@@ -182,21 +192,45 @@ def save_losses(history, image_folder):
     
     losses = np.array(losses)
     val_losses = np.array(val_losses)
+    epochs = range(1, len(losses) +1)
     
     np.savetxt(image_folder + '10_losses_history.txt', losses)
     np.savetxt(image_folder + '11_val_losses_history.txt',val_losses)
     
-    plt.plot(losses, label = 'loss')
-    plt.plot(val_losses, label = 'val_loss')
+    plt.figure(figsize = (15,10))
+    plt.plot(epochs, losses, label = 'loss')
+    plt.plot(epochs, val_losses, label = 'val_loss')
     plt.legend()
+    plt.ylabel('RMSE', fontsize = 18)
+    plt.xlabel('Epochs', fontsize = 18)
+    plt.title('RMSE over Epochs', fontsize = 25)
     plt.savefig(image_folder + "12_losses.png")
+    
+def get_scaler(open_folder):
+    f = open(open_folder + "/min_max.txt", "r")
+    txt = f.read()
+    txt_split = txt.split(" - ")
+    arr_0 = np.array(txt_split[0][1:-1].split(", "), dtype = float)
+    arr_1 = np.array(txt_split[1][1:-1].split(", "), dtype = float)
+    arr = np.array([arr_0, arr_1])
+    scaler_in = dp.scale(pd.Series(arr[0]))[1]
+    scaler_out = dp.scale(pd.Series(arr[1]))[1]
+    scaler = [scaler_in, scaler_out]
+    return scaler
 
 ################################################################################
 ########################## Mathematical functions ##############################
 ################################################################################
 
 def exp_func(x, k, tau):
-    return -k* np.exp((-1/tau)*x) +k
+    results = []
+    for i in x:
+        try:
+            ans = -k* math.exp((-1/tau)*i) +k
+        except OverflowError:
+            ans = float('inf')
+        results.append(ans)
+    return results 
 
 def quadr_func(x, p1, p2, p3):
     return p1 * x**2 + p2*x + p3

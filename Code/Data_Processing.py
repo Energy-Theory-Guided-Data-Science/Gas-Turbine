@@ -1,8 +1,7 @@
 import lttb
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 ################################################################################
 ####################### Preperation of data ####################################
 ################################################################################
@@ -22,12 +21,11 @@ def scale(data_series, scaler = None):
     data = data_series.values
     data = data.reshape(-1, 1)
     if scaler is None:
-        scaler = MinMaxScaler(feature_range = (-1,1), )
+        scaler = StandardScaler()
         scaler = scaler.fit(data)
     data_scaled = scaler.transform(data)
     data_scaled = [x[0] for x in data_scaled]
     return data_scaled, scaler
-
 
 
 # prepare the data for the RNNs.
@@ -37,13 +35,19 @@ def scale(data_series, scaler = None):
 #      - all_lags: [boolean] set True to use all lags, False to use only the current and the last
 #      - differences: [string] specify which method should be used for the preparation. Current methods include 'add' (include differences in input --> Intermediate (22)), 'predict' (include in output --> RNN predict Diff (31)) and 'input' (include difference of inputs in model input).
 #      - hybrid: [boolean] if True include theoretical predictions in model training.
-def prepare_data(data, lag = 60, all_lags = True,
+def prepare_data(data, scaler = None, lag = 60, all_lags = True,
                  differences = None, hybrid = False):
     df = pd.DataFrame()
     
     # first scale the given data and put the scalers in a list
-    input_scaled, scaler_input = scale(data['input_voltage'])
-    power_scaled, scaler_power = scale(data['el_power'])
+    if scaler is None:
+        scaler_in = None
+        scaler_pow = None
+    else:
+        scaler_in = scaler[0]
+        scaler_pow = scaler[1]
+    input_scaled, scaler_input = scale(data['input_voltage'], scaler = scaler_in)
+    power_scaled, scaler_power = scale(data['el_power'], scaler = scaler_pow)
     scaler = [scaler_input, scaler_power]
     
     # append both scaled values with -1 (scaled as 0) by the lag
@@ -73,7 +77,7 @@ def prepare_data(data, lag = 60, all_lags = True,
         if not 'theor_predictions' in data:
             print('Have not found column "theor_predictions" in DataFrame. Please ensure to have theoretical predictions before running hybrid model.')
             return None
-        theor_preds_scaled, scaler_theor = scale(data['theor_predictions'])
+        theor_preds_scaled, scaler_theor = scale(data['theor_predictions'], scaler = scaler_pow)
         scaler.append(scaler_theor)
         X['theor_pred'] = theor_preds_scaled
        
@@ -82,13 +86,13 @@ def prepare_data(data, lag = 60, all_lags = True,
     if differences == 'add':
         X['difference'] = diffs
     elif differences == 'add_scaled':
-        diffs_scaled, scaler_diffs = scale(diffs)
+        diffs_scaled, scaler_diffs = scale(diffs, scaler = scaler_pow)
         X['difference'] = diffs_scaled
         scaler.append(scaler_diffs)
     elif differences == 'predict':
         y['diff'] = diffs
     elif differences == 'predict_scaled':
-        diffs_scaled, scaler_diffs = scale(diffs)
+        diffs_scaled, scaler_diffs = scale(diffs, scaler = scaler_pow)
         y['diff'] = diffs_scaled
         scaler.append(scaler_diffs)
     elif differences == 'input':
