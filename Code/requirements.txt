@@ -4,6 +4,7 @@ numpy
 sklearn
 #time
 #random
-#lttb
+lttb
 matplotlib
 tensorflow
+keras
