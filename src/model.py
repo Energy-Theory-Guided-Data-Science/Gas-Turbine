@@ -72,6 +72,7 @@ class Model:
             self.approach = "Loss_Function"
         self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
         self.ex_name = ex_name
+        self.seed = seed
         kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
@@ -162,46 +163,30 @@ class Model:
         :param history: The training history.
         :param loss_batch_history: The training history over each batch for all epochs.
         """
-        losses = np.array(history.history["loss"])
-        val_losses = np.array(history.history["val_loss"])
-        np.savetxt(self.results_folder + "History/" + "losses_history.txt", losses)
-        np.savetxt(self.results_folder + "History/" + "val_losses_history.txt", val_losses)
-        np.savetxt(
-            self.results_folder + "History/" + "rmse_history.txt", np.array(history.history["root_mean_squared_error"])
-        )
-        np.savetxt(
-            self.results_folder + "History/" + "val_rmse_history.txt",
-            np.array(history.history["val_root_mean_squared_error"]),
-        )
-        np.savetxt(
-            self.results_folder + "History/" + "mse_history.txt", np.array(history.history["mean_squared_error"])
-        )
-        np.savetxt(
-            self.results_folder + "History/" + "val_mse_history.txt",
-            np.array(history.history["val_mean_squared_error"]),
-        )
+        history_dict = {}
+        batch_history_dict = {}
+        history_dict["loss"] = np.array(history.history["loss"])
+        history_dict["val_loss"] = np.array(history.history["val_loss"])
+        history_dict["rmse"] = np.array(history.history["root_mean_squared_error"])
+        history_dict["val_rmse"] = np.array(history.history["val_root_mean_squared_error"])
+        history_dict["mse"] = np.array(history.history["mean_squared_error"])
+        history_dict["val_mse"] = np.array(history.history["val_mean_squared_error"])
+        history_dict["epoch"] = np.arange(1, len(history_dict["loss"]) + 1)
+        batch_history_dict["loss"] = np.array(loss_batch_history.history["loss"])
+        batch_history_dict["mse"] = np.array(loss_batch_history.history["mse"])
+        n_batches = len(batch_history_dict["loss"]) // len(history_dict["epoch"])
+        batch_history_dict["epoch"] = np.repeat(history_dict["epoch"], n_batches)
+        batch_history_dict["batch"] = np.tile(np.arange(1, n_batches + 1), len(history_dict["epoch"]))
         if self.loss_function != "mean_squared_error":
-            np.savetxt(
-                self.results_folder + "History/" + "physical_metric_history.txt",
-                np.array(history.history["loss_function_diff"]),
-            )
-            np.savetxt(
-                self.results_folder + "History/" + "val_physical_metric_history.txt",
-                np.array(history.history["val_loss_function_diff"]),
-            )
-            np.savetxt(
-                self.results_folder + "History/" + "batch_physical_loss_history.txt",
-                np.array(loss_batch_history.history["physical_loss"]),
-            )
-
-        np.savetxt(
-            self.results_folder + "History/" + "batch_loss_history.txt", np.array(loss_batch_history.history["loss"])
-        )
-        np.savetxt(
-            self.results_folder + "History/" + "batch_mse_history.txt", np.array(loss_batch_history.history["mse"])
-        )
-
-        self.best_epoch = np.argmin(val_losses) + 1
+            history_dict["physical_metric"] = np.array(history.history["loss_function_diff"])
+            history_dict["val_physical_metric"] = np.array(history.history["val_loss_function_diff"])
+            batch_history_dict["physical_loss"] = np.array(loss_batch_history.history["physical_loss"])
+        self.best_epoch = np.argmin(history_dict["val_loss"]) + 1
+        history_df = pd.DataFrame.from_records(history_dict)
+        history_df.to_csv(self.results_folder + "History/history.csv", index=False)
+        batch_history_df = pd.DataFrame.from_records(batch_history_dict)
+        batch_history_df = batch_history_df[(batch_history_df["loss"] != -1) & (batch_history_df["mse"] != -1)]
+        batch_history_df.to_csv(self.results_folder + "History/batch_history.csv", index=False)
 
     def _load_best_model(self):
         """
