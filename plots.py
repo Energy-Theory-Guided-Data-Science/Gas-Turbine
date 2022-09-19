@@ -115,7 +115,7 @@ def plot_wrong_domain(results):
     :param results: A pandas DataFrame with the results of the wrong domain experiment.
     """
     fig, axes = plt.subplots(ncols=3, nrows=2, figsize=(20, 10), dpi=140)
-    fig.suptitle(f"Sensitivity to Provided Domain Knowledge")
+    fig.suptitle(f"Sensitivity to Provided Domain Knowledge\n\nSynthetic Data")
     df_plot = results[results["data_type"] == "synthetic"].copy()
     for i, steepness in enumerate(set(df_plot["steepness"])):
         df_plot_steepness = df_plot[df_plot["steepness"] == steepness].copy()
@@ -123,22 +123,20 @@ def plot_wrong_domain(results):
         sns.pointplot(
             ax=axes[0, i],
             data=df_plot_steepness,
-            x="steepness",
+            x="steepness_loss",
             y="test_rmse_mean",
-            hue="approach",
             ci=68,
             marker="o",
             capsize=0.1,
             alpha=0.7,
         ).set(xlabel="Steepness", ylabel="RMSE")
     df_plot = results[results["data_type"] == "experiment"].copy()
-    axes[1, 1].set_title(f"Correct Steepness: {df_plot['steepness'].iloc[0]}")
+    axes[1, 1].set_title(f"Experiment Data\nCorrect Steepness: {df_plot['steepness'].iloc[0]}")
     sns.pointplot(
         ax=axes[1, 1],
         data=df_plot,
-        x="steepness",
+        x="steepness_loss",
         y="test_rmse_mean",
-        hue="approach",
         ci=68,
         marker="o",
         capsize=0.1,
@@ -147,14 +145,14 @@ def plot_wrong_domain(results):
     axes[1, 0].axis("off")
     axes[1, 2].axis("off")
     fig.tight_layout()
-    fig.savefig("Results/Plots/varying_lambda_value.png", dpi=fig.dpi)
-    fig.savefig("Results/Plots/varying_lambda_value.svg", dpi=fig.dpi)
+    fig.savefig("Results/Plots/varying_wrong_domain.png", dpi=fig.dpi)
+    fig.savefig("Results/Plots/varying_wrong_domain.svg", dpi=fig.dpi)
     plt.close("all")
     plt.clf()
 
 
 def main():
-    os.makedirs("Results/Plots")
+    os.makedirs("Results/Plots", exist_ok=True)
     results = get_results()
     plot_training_size(results[results["ex_name"] == "training_size"])
     plot_lambda_value(results[results["ex_name"] == "lambda_value"])
