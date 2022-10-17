@@ -36,6 +36,7 @@ class Model:
         verbose=True,
         seed=42,
         ex_name="Test",
+        results_folder=None,
     ):
         """
         Initialize the model.
@@ -70,7 +71,9 @@ class Model:
             self.approach = "Data_Baseline"
         else:
             self.approach = "Loss_Function"
-        self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
+        self.results_folder = results_folder
+        if results_folder is None:
+            self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
         self.ex_name = ex_name
         self.seed = seed
         kernel_reg = regularizers.l2(0.05)
@@ -155,7 +158,7 @@ class Model:
 
         self.dur_train = datetime.now() - start_train
         self._save_history(history, loss_batch_history)
-        self._load_best_model()
+        self.load_best_model()
 
     def _save_history(self, history, loss_batch_history):
         """
@@ -188,7 +191,7 @@ class Model:
         batch_history_df = batch_history_df[(batch_history_df["loss"] != -1) & (batch_history_df["mse"] != -1)]
         batch_history_df.to_csv(self.results_folder + "History/batch_history.csv", index=False)
 
-    def _load_best_model(self):
+    def load_best_model(self):
         """
         Load the best model.
         """
@@ -239,7 +242,8 @@ class Model:
                 results.at[index[i], "maxae"] = results_ex["MaxAE"]
                 results.at[index[i], "mape"] = results_ex["MAPE"]
 
-            results.to_csv(self.results_folder + "results_" + dataset_type + ".csv")
+            results = results.reset_index().rename(columns={'index': 'sample_name'})
+            results.to_csv(self.results_folder + "results_" + dataset_type + ".csv", index=False)
 
         start_predict = datetime.now()
 
@@ -309,9 +313,9 @@ class Model:
         test_std = round(np.std(delete_best_worst(results_test["rmse"])), 3)
         experiment_result += "\nRMSE (over all test samples): " + str(test_mean) + " ±(" + str(test_std) + ")"
 
-        experiment_result += "\nBest Epoch: " + str(self.best_epoch)
-        experiment_result += "\nTraining Time: " + str(self.dur_train)
-        experiment_result += "\nPrediction Time: " + str(self.dur_predict)
+        #experiment_result += "\nBest Epoch: " + str(self.best_epoch)
+        #experiment_result += "\nTraining Time: " + str(self.dur_train)
+        #experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
         print(experiment_result)
         self._save_result()
@@ -321,9 +325,9 @@ class Model:
         Save the results of the experiment in a json file.
         """
         result = {
-            "best_epoch": int(self.best_epoch),
-            "train_time": str(self.dur_train),
-            "predict_time": str(self.dur_predict),
+            #"best_epoch": int(self.best_epoch),
+            #"train_time": str(self.dur_train),
+            #"predict_time": str(self.dur_predict),
             "train_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
             "train_rmse_std": round(np.std(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
             "test_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_test.csv")["rmse"]), 3),
@@ -337,6 +341,8 @@ class Model:
         Save the configuration of the experiment in a json file.
         :param dataset: The dataset used for the experiment.
         """
+        if os.path.isfile(self.results_folder + "config.json"):
+            return False
         config = {
             "ex_name": self.ex_name,
             "approach": self.approach,

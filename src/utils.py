@@ -39,6 +39,7 @@ def create_prediction_plot(
     :param dataset_type: The type of the dataset (e.g. "test" or "train").
     :param title: The title of the plot.
     """
+    os.makedirs(image_folder, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 5), dpi=140)
     sns.lineplot(ax=ax, x=times, y=true_values, color="#666666", label="True", linewidth=2)
     sns.lineplot(ax=ax, x=preds_time, y=predictions, color="#009682", label="Predictions", linewidth=3)
