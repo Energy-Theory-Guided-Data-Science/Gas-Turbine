@@ -1,4 +1,4 @@
-# Gas-Turbine
+conda env create -f env.yml# Gas-Turbine
 Can domain knowledge help to model a gas turbine?
 
 ## Getting Started
@@ -7,7 +7,7 @@ When you download this code, ensure, the data available is in a subfolder called
 Within the Code folder is a file called requirements.txt which includes all packages which need to be installed. Install these packages with 
 
 ```python
-pip install -r requirements.txt
+conda env create -f env.yml
 ```
 
 If no errors occur, all packages are installed correctly. The package `lttb` might be needed to be installed seperately using `pip install lttb`.
