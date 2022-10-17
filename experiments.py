@@ -70,7 +70,7 @@ def ex_lambda_value(seed):
     Run experiments with different values for lambda. Lambda is the weight of the physical part of the loss function.
     :param seed: The seed to use for the random number generator.
     """
-    lambdas = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 1000]
+    lambdas = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
     for l in lambdas:
         for loss in LOSS_FUNCTIONS:
             run_ex(
@@ -133,6 +133,7 @@ def ex_wrong_domain(seed):
     for s_loss in experiment_steepness_values:
         run_ex(
             data_type="experiment",
+            steepness=6.388,
             steepness_loss=s_loss,
             n_train_samples=6,
             seed=seed,
