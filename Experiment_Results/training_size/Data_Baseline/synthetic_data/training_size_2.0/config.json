@@ -1,0 +1,20 @@
+{
+    "ex_name": "training_size",
+    "approach": "Data_Baseline",
+    "seed": 44,
+    "loss_function": "mean_squared_error",
+    "epochs": 100,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "neurons": 16,
+    "lambda": 100,
+    "steepness_loss": 10,
+    "data_type": "synthetic",
+    "steepness": 10,
+    "n_train_samples": 2,
+    "train_samples": [
+        "42",
+        "54"
+    ],
+    "lookback": 398
+}
