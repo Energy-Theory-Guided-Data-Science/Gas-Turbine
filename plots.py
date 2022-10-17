@@ -13,6 +13,8 @@ def get_results():
     """
     ex_results = []
     for ex in glob(f"Results/*/*/"):
+        if not glob(ex + "config.json"):
+            continue
         with open(ex + "config.json") as f:
             ex_config = json.load(f)
         if ex_config["data_type"] == "experiment":
@@ -27,7 +29,7 @@ def get_results():
     return df_ex_results
 
 
-def plot_training_size(results):
+def plot_training_size(results, show=False, save=True):
     """
     Plot and save the results of the training size experiment.
     :param results: A pandas DataFrame with the results of the training sizes experiment.
@@ -49,13 +51,17 @@ def plot_training_size(results):
             alpha=0.7,
         ).set(xlabel="Training Size [%]", ylabel="RMSE")
     fig.tight_layout()
-    fig.savefig("Results/Plots/varying_training_size.png", dpi=fig.dpi)
-    fig.savefig("Results/Plots/varying_training_size.svg", dpi=fig.dpi)
-    plt.close("all")
-    plt.clf()
+    if save:
+        fig.savefig("Results/Plots/varying_training_size.png", dpi=fig.dpi)
+        fig.savefig("Results/Plots/varying_training_size.svg", dpi=fig.dpi)
+    if show:
+        plt.show()
+    else:
+        plt.close("all")
+        plt.clf()
 
 
-def plot_lambda_value(results):
+def plot_lambda_value(results, show=False, save=True):
     """
     Plot and save the results of the lambda value experiment.
     :param results: A pandas DataFrame with the results of the lambda values experiment.
@@ -70,20 +76,22 @@ def plot_lambda_value(results):
             data=df_plot,
             x="lambda",
             y="test_rmse_mean",
-            hue="approach",
             ci=68,
             marker="o",
             capsize=0.1,
             alpha=0.7,
         ).set(xlabel="Lambda", ylabel="RMSE")
     fig.tight_layout()
-    fig.savefig("Results/Plots/varying_lambda_value.png", dpi=fig.dpi)
-    fig.savefig("Results/Plots/varying_lambda_value.svg", dpi=fig.dpi)
-    plt.close("all")
-    plt.clf()
+    if save:
+        fig.savefig("Results/Plots/varying_lambda_value.png", dpi=fig.dpi)
+        fig.savefig("Results/Plots/varying_lambda_value.svg", dpi=fig.dpi)
+    if show:
+        plt.show()
+    else:
+        plt.close("all")
+        plt.clf()
 
-
-def plot_steepness_value(results):
+def plot_steepness_value(results, show=False, save=True):
     """
     Plot and save the results of the steepness values experiment.
     :param results: A pandas DataFrame with the results of the steepness values experiment.
@@ -103,58 +111,51 @@ def plot_steepness_value(results):
         alpha=0.7,
     ).set(xlabel="Steepness", ylabel="RMSE")
     fig.tight_layout()
-    fig.savefig("Results/Plots/varying_steepness_value.png", dpi=fig.dpi)
-    fig.savefig("Results/Plots/varying_steepness_value.svg", dpi=fig.dpi)
-    plt.close("all")
-    plt.clf()
+    if save:
+        fig.savefig("Results/Plots/varying_steepness_value.png", dpi=fig.dpi)
+        fig.savefig("Results/Plots/varying_steepness_value.svg", dpi=fig.dpi)
+    if show:
+        plt.show()
+    else:
+        plt.close("all")
+        plt.clf()
 
 
-def plot_wrong_domain(results):
+def plot_wrong_domain(results, show=False, save=True):
     """
     Plot and save the results of the wrong domain experiment.
     :param results: A pandas DataFrame with the results of the wrong domain experiment.
     """
-    fig, axes = plt.subplots(ncols=3, nrows=2, figsize=(20, 10), dpi=140)
+    fig, axes = plt.subplots(ncols=3, nrows=1, figsize=(15, 5), dpi=140)
     fig.suptitle(f"Sensitivity to Provided Domain Knowledge")
     df_plot = results[results["data_type"] == "synthetic"].copy()
-    for i, steepness in enumerate(set(df_plot["steepness"])):
+    for i, steepness in enumerate(sorted(set(df_plot["steepness"]))):
         df_plot_steepness = df_plot[df_plot["steepness"] == steepness].copy()
-        axes[0, i].set_title(f"Correct Steepness: {steepness}")
+        axes[i].set_title(f"Correct Steepness: {steepness}")
         sns.pointplot(
-            ax=axes[0, i],
+            ax=axes[i],
             data=df_plot_steepness,
-            x="steepness",
+            x="steepness_loss",
             y="test_rmse_mean",
-            hue="approach",
             ci=68,
             marker="o",
             capsize=0.1,
             alpha=0.7,
-        ).set(xlabel="Steepness", ylabel="RMSE")
+        ).set(xlabel="Provided Steepness", ylabel="RMSE")
     df_plot = results[results["data_type"] == "experiment"].copy()
-    axes[1, 1].set_title(f"Correct Steepness: {df_plot['steepness'].iloc[0]}")
-    sns.pointplot(
-        ax=axes[1, 1],
-        data=df_plot,
-        x="steepness",
-        y="test_rmse_mean",
-        hue="approach",
-        ci=68,
-        marker="o",
-        capsize=0.1,
-        alpha=0.7,
-    ).set(xlabel="Steepness", ylabel="RMSE")
-    axes[1, 0].axis("off")
-    axes[1, 2].axis("off")
     fig.tight_layout()
-    fig.savefig("Results/Plots/varying_lambda_value.png", dpi=fig.dpi)
-    fig.savefig("Results/Plots/varying_lambda_value.svg", dpi=fig.dpi)
-    plt.close("all")
-    plt.clf()
+    if save:
+        fig.savefig("Results/Plots/varying_wrong_domain.png", dpi=fig.dpi)
+        fig.savefig("Results/Plots/varying_wrong_domain.svg", dpi=fig.dpi)
+    if show:
+        plt.show()
+    else:
+        plt.close("all")
+        plt.clf()
 
 
 def main():
-    os.makedirs("Results/Plots")
+    os.makedirs("Results/Plots", exist_ok=True)
     results = get_results()
     plot_training_size(results[results["ex_name"] == "training_size"])
     plot_lambda_value(results[results["ex_name"] == "lambda_value"])
