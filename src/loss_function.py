@@ -8,13 +8,17 @@ def get(name):
     :param name: Name of the loss function.
     :return: Loss function.
     """
-    if name == "custom":
-        return loss_function
-    if name == "custom_relu":
-        return loss_function_relu
+    if name == "two_state":
+        return loss_function_two_state
+    if name == 'range':
+        return loss_func_range
+    if name == 'diff_range':
+        return loss_func_diff_range
+    if name == 'mse_diff':
+        return loss_func_mse_diff
 
 
-def loss_function(theta, steepness, batch_size):
+def loss_function_two_state(theta, steepness):
     """
     The loss function consists of two parts. The first part is the mean squared error between the true and the predicted values.
     The second part is the mean squared error between expected domain knowledge parameters and the absolute differences
@@ -24,75 +28,97 @@ def loss_function(theta, steepness, batch_size):
     :param batch_size: Size of the batch.
     """
 
-    def loss_function_diff(y_true, y_predicted):
-        y_true = tf.raw_ops.Reshape(tensor=y_true, shape=tf.raw_ops.Shape(input=y_predicted))
-        y_true = tf.raw_ops.Reshape(tensor=y_true, shape=[-1])
-        y_predicted = tf.raw_ops.Reshape(tensor=y_predicted, shape=[-1])
+    def loss_function(y_true, y_predicted):
+        y_true = tf.reshape(y_true, [-1])
+        y_predicted = tf.reshape(y_predicted, [-1])
 
-        y_shifted = tf.raw_ops.Roll(input=y_true, shift=1, axis=0)
-        y_difference = tf.raw_ops.Sub(x=y_predicted, y=y_shifted)
-
-        known_diff_trans = np.full(batch_size - 1, steepness)
-        known_tensor_trans = tf.convert_to_tensor(known_diff_trans, dtype="float32")
-        known_diff_static = np.full(batch_size - 1, 0)
-        known_tensor_static = tf.convert_to_tensor(known_diff_static, dtype="float32")
-
+        y_shifted = tf.roll(y_predicted, shift=1, axis=0)      
+        y_difference = tf.cond(tf.size(y_true) > 1, 
+                               lambda: tf.abs(y_predicted[1:] - y_shifted[1:]), 
+                               lambda: tf.constant([0.0], dtype=tf.float32))
+        
         criterion = tf.keras.losses.MeanSquaredError()
 
         loss1 = criterion(y_true, y_predicted)
 
-        tgds_loss_trans = criterion(tf.raw_ops.Abs(x=y_difference[1:]), known_tensor_trans[: tf.size(y_difference) - 1])
-        tgds_loss_static = criterion(
-            tf.raw_ops.Abs(x=y_difference[1:]), known_tensor_static[: tf.size(y_difference) - 1]
-        )
+        tgds_loss_trans = criterion(y_difference, tf.ones_like(y_difference) * steepness)
+        tgds_loss_static = criterion(y_difference, tf.zeros_like(y_difference))
 
-        tgds_loss = tf.raw_ops.Minimum(x=tgds_loss_static, y=tgds_loss_trans)
+        tgds_loss = tf.minimum(tgds_loss_static, tgds_loss_trans)
 
-        for_test = tf.constant([0.0], dtype=tf.float32)
-        tgds_loss = tf.where(tf.math.greater(tf.size(y_difference), tf.size(for_test)), tgds_loss, for_test)
-
-        loss = tf.raw_ops.Add(x=loss1, y=tf.math.scalar_mul(theta, tgds_loss))
+        loss = loss1 + theta * tgds_loss
 
         return loss
 
-    return loss_function_diff
+    return loss_function
 
 
-def loss_function_relu(theta, steepness, batch_size):
-    """
-    The ReLU implementation of the loss function.
-    :param theta: Weight of the second part of the loss function.
-    :param steepness: Expected steepness of the true values.
-    :param batch_size: Size of the batch.
-    """
-
-    def loss_function_diff(y_true, y_predicted):
-        y_true = tf.raw_ops.Reshape(tensor=y_true, shape=tf.raw_ops.Shape(input=y_predicted))
-        y_true = tf.raw_ops.Reshape(tensor=y_true, shape=[-1])
-        y_predicted = tf.raw_ops.Reshape(tensor=y_predicted, shape=[-1])
-
-        y_shifted = tf.raw_ops.Roll(input=y_true, shift=1, axis=0)
-        y_difference = tf.raw_ops.Sub(x=y_predicted, y=y_shifted)
-
-        known_diff = np.full(batch_size - 1, steepness)
-        known_tensor = tf.convert_to_tensor(known_diff, dtype="float32")
+def loss_func_mse_diff(prm_tgds):
+    def loss_function(y_true, y_pred):
+        y_true = tf.reshape(y_true, [-1])
+        y_pred = tf.reshape(y_pred, [-1])
+        
+        y_true_shifted = tf.roll(y_true, shift=1, axis=0)
+        y_pred_shifted = tf.roll(y_pred, shift=1, axis=0)      
+        
+        y_true_difference = tf.cond(tf.size(y_true) > 1, 
+                               lambda: tf.abs(y_true[1:] - y_true_shifted[1:]), 
+                               lambda: tf.constant([0.0], dtype=tf.float32))
+        y_pred_difference = tf.cond(tf.size(y_pred) > 1, 
+                               lambda: tf.abs(y_pred[1:] - y_pred_shifted[1:]), 
+                               lambda: tf.constant([0.0], dtype=tf.float32))
 
         criterion = tf.keras.losses.MeanSquaredError()
 
-        loss1 = criterion(y_true, y_predicted)
+        loss1 = criterion(y_true, y_pred)
+        
+        tgds_loss = criterion(y_true_difference, y_pred_difference)
 
-        tgds_loss = tf.raw_ops.Sub(x=tf.raw_ops.Abs(x=y_difference[1:]), y=known_tensor[: tf.size(y_difference) - 1])
-        tgds_loss = tf.keras.activations.relu(tgds_loss)
-
-        test_size = tf.constant([0.0], dtype=tf.float32)
-        tgds_loss = tf.where(
-            tf.raw_ops.GreaterEqual(x=tf.size(y_difference), y=tf.size(test_size)), tgds_loss, test_size
-        )
-
-        tgds_loss = tf.math.reduce_sum(tgds_loss)
-
-        loss = tf.raw_ops.Add(x=loss1, y=tf.math.scalar_mul(theta, tgds_loss))
+        loss = loss1 + prm_tgds * tgds_loss
 
         return loss
 
-    return loss_function_diff
+    return loss_function
+
+def loss_func_range(prm_tgds, min_value, max_value):
+    def loss_function(y_true, y_predicted):
+        y_true = tf.reshape(y_true, [-1])
+        y_predicted = tf.reshape(y_predicted, [-1])
+
+        criterion = tf.keras.losses.MeanSquaredError()
+        loss1 = criterion(y_true, y_predicted)
+
+        # Calculate additional loss for out-of-range predictions
+        out_of_range_low = tf.cast(y_predicted < min_value, dtype=tf.float32) * (y_predicted - min_value)
+        out_of_range_high = tf.cast(y_predicted > max_value, dtype=tf.float32) * (y_predicted - max_value)
+        range_loss = criterion(out_of_range_low + out_of_range_high, tf.zeros_like(y_predicted))
+
+        loss = loss1 + prm_tgds * range_loss
+
+        return loss
+
+    return loss_function
+
+def loss_func_diff_range(prm_tgds, min_diff, max_diff):
+    def loss_function(y_true, y_predicted):
+        y_true = tf.reshape(y_true, [-1])
+        y_predicted = tf.reshape(y_predicted, [-1])
+
+        y_shifted = tf.roll(y_predicted, shift=1, axis=0)
+        y_difference = tf.cond(tf.size(y_true) > 1, 
+                               lambda: y_predicted[1:] - y_shifted[1:], 
+                               lambda: tf.constant([0.0], dtype=tf.float32))
+        
+        criterion = tf.keras.losses.MeanSquaredError()
+        loss1 = criterion(y_true, y_predicted)
+        
+        # Calculate additional loss for out-of-range differences
+        out_of_range_diff_low = tf.cast(y_difference < min_diff, dtype=tf.float32) * (y_difference - min_diff)
+        out_of_range_diff_high = tf.cast(y_difference > max_diff, dtype=tf.float32) * (y_difference - max_diff)
+        diff_loss = criterion(out_of_range_diff_low + out_of_range_diff_high, tf.zeros_like(y_difference))
+
+        loss = loss1 + prm_tgds * diff_loss
+
+        return loss
+
+    return loss_function

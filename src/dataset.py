@@ -28,15 +28,16 @@ class Dataset:
         self.seed = seed
         if self.data_type == "experiment":
             self.steepness = 6.388
+            if test_samples is None:
+                self.test_samples = ["4", "22"]
+            else:
+                self.test_samples = test_samples
         elif steepness is None:
             raise ValueError("Steepness must be specified for synthetic data")
         else:
             self.steepness = steepness
-        if test_samples is None and self.data_type == "experiment":
-            self.test_samples = ["4", "22"]
-        else:
-            self.test_samples = test_samples
         self.n_train_samples = n_train_samples
+        self.train_frame = None
         if self.data_type == "synthetic":
             self._get_synthetic_data()
         elif self.data_type == "experiment":
@@ -78,6 +79,7 @@ class Dataset:
         indices = [index for index, value in enumerate(self.data_names) if value not in self.test_samples]
         np.random.seed(self.seed)
         self.train_indices = np.random.choice(indices, self.n_train_samples, replace=False)
+        self.test_indices = [index for index, value in enumerate(self.data_names) if value in self.test_samples]
 
     def _get_scaler(self, folder):
         """
@@ -179,7 +181,7 @@ class Dataset:
             y_transformed = y_transformed.values
         return x_transformed, y_transformed
 
-    def create_train_data(self, lag=None):
+    def prepare_data(self, indices, lag=None):
         """
         Create the training data.
         :param lag: The lag to use. If None, the lag from the data will be used.
@@ -188,17 +190,19 @@ class Dataset:
             self.lag = lag
 
         x, y = pd.DataFrame(), pd.DataFrame()
-        train_samples = [self.data[i] for i in self.train_indices]
+        train_samples = [self.data[i] for i in indices]
         for sample in train_samples:
             x_ex, y_ex = self.transform_sample(sample)
             x = pd.concat([x, x_ex], ignore_index=True)
             y = pd.concat([y, y_ex], ignore_index=True)
-        self.train_frame = pd.concat([x, y], axis=1)
+        if self.train_frame is None:
+            self.train_frame = pd.concat([x, y], axis=1)
         # reshape input to be 3D [samples, timestamps, features]
         n_features = 1
         x = x.values
-        self.X_train = x.reshape(x.shape[0], x.shape[1], n_features)
-        self.y_train = y.values
+        X_train = x.reshape(x.shape[0], x.shape[1], n_features)
+        y_train = y.values
+        return X_train, y_train
 
     def _synthesize_data(self, folder):
         """

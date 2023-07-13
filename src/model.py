@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow import metrics
 from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint, LearningRateScheduler
+from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
 import src.loss_function as lf
 import pandas as pd
@@ -56,7 +56,7 @@ class Model:
         :param seed: The seed used for the model. Default is 42.
         :param ex_name: The name of the experiment. Default is "Test".
         """
-        tf.random.set_seed(seed)
+        # tf.random.set_seed(seed)
         if gpu != -1:
             tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
             tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
@@ -92,33 +92,42 @@ class Model:
                 optimizer=opt,
                 metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()],
             )
-        else:
+        elif self.loss_function == 'range':
+            min_value, max_value = 0, 4000
+            values_to_transform = [[min_value], [max_value]]
+            scaled_values = scaler[1].transform(values_to_transform)
+            scaled_min_value = scaled_values[0][0]
+            scaled_max_value = scaled_values[1][0]
+            loss_func = lf.get(self.loss_function)(self.theta, scaled_min_value, scaled_max_value)
+            model.compile(loss=loss_func, optimizer=opt,
+                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+        elif self.loss_function == 'diff_range':
+            min_value, max_value = -self.steepness, self.steepness
+            values_to_transform = [[min_value], [max_value]]
+            scaled_values = scaler[1].transform(values_to_transform)
+            scaled_min_value = scaled_values[0][0]
+            scaled_max_value = scaled_values[1][0]
+            loss_func = lf.get(self.loss_function)(self.theta, scaled_min_value, scaled_max_value)
+            model.compile(loss=loss_func, optimizer=opt,
+                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+        elif self.loss_function == 'mse_diff':
+            loss_func = lf.get(self.loss_function)(self.theta)
+            model.compile(loss=loss_func, optimizer=opt,
+                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+        elif self.loss_function == 'two_state':
             loss_func = lf.get(self.loss_function)(
                 theta=self.theta,
-                steepness=scaler[1].transform(np.array([self.steepness]).reshape(-1, 1)),
-                batch_size=self.batch_size,
+                steepness=scaler[1].transform([[self.steepness]])[0][0]
             )
             model.compile(
                 loss=loss_func,
                 optimizer=opt,
-                metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError(), loss_func],
+                metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()],
             )
         self.model = model
 
-    @staticmethod
-    def _scheduler(epoch, lr):
-        """
-        Scheduler for the learning rate.
-        :param epoch: The current epoch.
-        :param lr: The current learning rate.
-        :return: The new learning rate.
-        """
-        if epoch < 50:
-            return lr
-        else:
-            return lr * tf.math.exp(-0.1)
 
-    def train(self, x_train, y_train, epochs, val_frac=0.1, patience=40, early_stopping=True):
+    def train(self, x_train, y_train, epochs,  x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=True):
         """
         Train the model.
         :param x_train: The training data.
@@ -141,20 +150,31 @@ class Model:
             mode="min",
             save_best_only=True,
         )
-        lr = LearningRateScheduler(self._scheduler)
-        callbacks = [mc, lr, TerminateOnNaN(), loss_batch_history]
+        callbacks = [mc, TerminateOnNaN(), loss_batch_history]
         if early_stopping:
             callbacks.append(es)
-        history = self.model.fit(
-            x_train,
-            y_train,
-            validation_split=val_frac,
-            batch_size=self.batch_size,
-            epochs=self.epochs,
-            verbose=self.verbose,
-            shuffle=False,
-            callbacks=callbacks,
-        )
+        if x_val is None:
+            history = self.model.fit(
+                x_train,
+                y_train,
+                validation_split=val_frac,
+                batch_size=self.batch_size,
+                epochs=self.epochs,
+                verbose=self.verbose,
+                shuffle=False,
+                callbacks=callbacks,
+            )
+        else:
+            history = self.model.fit(
+                x_train,
+                y_train,
+                validation_data=(x_val, y_val),
+                batch_size=self.batch_size,
+                epochs=self.epochs,
+                verbose=self.verbose,
+                shuffle=False,
+                callbacks=callbacks,
+            )
 
         self.dur_train = datetime.now() - start_train
         self._save_history(history, loss_batch_history)
@@ -181,8 +201,8 @@ class Model:
         batch_history_dict["epoch"] = np.repeat(history_dict["epoch"], n_batches)
         batch_history_dict["batch"] = np.tile(np.arange(1, n_batches + 1), len(history_dict["epoch"]))
         if self.loss_function != "mean_squared_error":
-            history_dict["physical_metric"] = np.array(history.history["loss_function_diff"])
-            history_dict["val_physical_metric"] = np.array(history.history["val_loss_function_diff"])
+            #history_dict["physical_metric"] = np.array(history.history["loss_function"])
+            #history_dict["val_physical_metric"] = np.array(history.history["val_loss_function"])
             batch_history_dict["physical_loss"] = np.array(loss_batch_history.history["physical_loss"])
         self.best_epoch = np.argmin(history_dict["val_loss"]) + 1
         history_df = pd.DataFrame.from_records(history_dict)
@@ -252,8 +272,8 @@ class Model:
             data_test = dataset.data[-200:]
             names_test = dataset.data_names[-200:]
         elif dataset.data_type == "experiment":
-            data_test = [dataset.data[i] for i in [1, 5]]
-            names_test = [dataset.data_names[i] for i in [1, 5]]
+            data_test = [dataset.data[i] for i in dataset.test_indices]
+            names_test = dataset.test_samples
 
         create_predictions("test", data_test, names_test)
         create_predictions(
@@ -359,6 +379,7 @@ class Model:
             "n_train_samples": dataset.n_train_samples,
             "train_samples": [dataset.data_names[i] for i in dataset.train_indices],
             "lookback": dataset.lag,
+            "test_samples": dataset.test_samples
         }
         with open(self.results_folder + "config.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
