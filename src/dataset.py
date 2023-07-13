@@ -16,7 +16,7 @@ class Dataset:
     Class for data preprocessing.
     """
 
-    def __init__(self, data_type, n_train_samples, seed=42, steepness=None):
+    def __init__(self, data_type, n_train_samples, seed=42, steepness=None, test_samples=None):
         """
         Initialize the dataset.
         :param data_type: The type of data to use. Can be "synthetic" or "experiment".
@@ -32,6 +32,10 @@ class Dataset:
             raise ValueError("Steepness must be specified for synthetic data")
         else:
             self.steepness = steepness
+        if test_samples is None and self.data_type == "experiment":
+            self.test_samples = ["4", "22"]
+        else:
+            self.test_samples = test_samples
         self.n_train_samples = n_train_samples
         if self.data_type == "synthetic":
             self._get_synthetic_data()
@@ -71,9 +75,9 @@ class Dataset:
             self.data[i] = data
         self._get_scaler(folder)
         self._get_lag(folder)
-        # 1 and 5 are ex_4(field, jump) and ex_22(laboratory, continuity) for test
+        indices = [index for index, value in enumerate(self.data_names) if value not in self.test_samples]
         np.random.seed(self.seed)
-        self.train_indices = np.random.choice([0, 2, 3, 4, 6, 7], self.n_train_samples, replace=False)
+        self.train_indices = np.random.choice(indices, self.n_train_samples, replace=False)
 
     def _get_scaler(self, folder):
         """
