@@ -13,7 +13,7 @@ def create_results_folder(data_type, approach):
     """
     time = datetime.now()
     folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
-    results_folder = f"../Results/{approach}/" + folder_name
+    results_folder = f"Results/{approach}/" + folder_name
     os.makedirs(results_folder)
     results_folder_images = results_folder + "Images/"
     os.makedirs(results_folder_images)
@@ -25,7 +25,7 @@ def create_results_folder(data_type, approach):
 
 
 def create_prediction_plot(
-    times, true_values, preds_time, predictions, image_folder, show_plot, sample_name, dataset_type, title
+        times, true_values, preds_time, predictions, image_folder, show_plot, sample_name, dataset_type, title
 ):
     """
     Creates a plot of the predictions of the model. The plot is saved in the specified result folder. The plot can be shown.

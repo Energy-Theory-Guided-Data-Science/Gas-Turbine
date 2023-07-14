@@ -47,7 +47,7 @@ class Dataset:
         """
         Get the synthetic data and split it into train and test sets. If the data is not present, it will be created and saved.
         """
-        folder = "../Data/Synthetic_Data/quadratic_40_0_linear_" + str(self.steepness) + "/"
+        folder = "Data/Synthetic_Data/quadratic_40_0_linear_" + str(self.steepness) + "/"
         if not glob(folder):
             self._synthesize_data(folder)
         files = sorted(glob(f"{folder}*.csv"), key=lambda x: int(x.split("_")[-1].split(".")[0]))
@@ -62,7 +62,7 @@ class Dataset:
         """
         Get the experiment data and split it into train and test sets. If the data is not present, it will be downloaded and saved.
         """
-        folder = "../Data/Experiment_Data/"
+        folder = "Data/Experiment_Data/"
         if not glob(folder):
             self._download_experiment_data(folder)
         self.data_names = ["1", "4", "9", "20", "21", "22", "23", "24"]
@@ -165,11 +165,11 @@ class Dataset:
         variable_names = list(dataset.keys())
         reframed.columns = list(
             map(
-                lambda column: variable_names[int(column[3 : column.find("(")]) - 1] + column[column.find("(") :],
+                lambda column: variable_names[int(column[3: column.find("(")]) - 1] + column[column.find("("):],
                 list(reframed.columns),
             )
         )
-        reframed.set_index(pd.Index(sample["time"][self.lag - 1 :]), inplace=True)
+        reframed.set_index(pd.Index(sample["time"][self.lag - 1:]), inplace=True)
         # the current power is a target variable
         y_transformed = reframed[["el_power(t)"]].copy()
         x_transformed = reframed.filter(regex="input_voltage(t*)").copy()
@@ -211,7 +211,7 @@ class Dataset:
         """
         os.makedirs(folder)
         stat_parameters = [40, 0, 0]
-        stat_function = lambda x, params: params[0] * x**2 + params[1] * x + params[2]
+        stat_function = lambda x, params: params[0] * x ** 2 + params[1] * x + params[2]
         trans_parameters = [self.steepness, 0]
         trans_function = lambda x, params: params[0] * x + params[1]
 
@@ -275,8 +275,8 @@ class Dataset:
 
                 v = value_splits[i]
                 values[ix_start:ix_end] = v
-            values[time_splits[-2] : time_splits[-1]] = value_splits[-2]
-            values[time_splits[-1] :] = value_splits[-1]
+            values[time_splits[-2]: time_splits[-1]] = value_splits[-2]
+            values[time_splits[-1]:] = value_splits[-1]
             return values
 
         def get_statistic_info():

@@ -1,12 +1,12 @@
 from datetime import datetime
 import numpy as np
 import tensorflow as tf
-from tensorflow import metrics
 from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-import src.loss_function as lf
+from src.loss_functions import LossTwoState, LossRange, LossMseDiff, LossDiffRange
+from src.loss_metrics import MetricLossTwoState, MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
 import sklearn.metrics
@@ -22,21 +22,21 @@ class Model:
     """
 
     def __init__(
-        self,
-        data_type,
-        loss_function,
-        scaler,
-        steepness,
-        input_shape,
-        neurons=16,
-        learning_rate=0.001,
-        theta=100,
-        batch_size=8,
-        gpu=0,
-        verbose=True,
-        seed=42,
-        ex_name="Test",
-        results_folder=None,
+            self,
+            data_type,
+            loss_function,
+            scaler,
+            steepness,
+            input_shape,
+            neurons=256,
+            learning_rate=0.001,
+            theta=100,
+            batch_size=8,
+            gpu=0,
+            verbose=True,
+            seed=42,
+            ex_name="Test",
+            results_folder=None,
     ):
         """
         Initialize the model.
@@ -86,48 +86,40 @@ class Model:
 
         opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
 
+        metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
         if self.loss_function == "mean_squared_error":
-            model.compile(
-                loss=self.loss_function,
-                optimizer=opt,
-                metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()],
-            )
+            loss_func = "mean_squared_error"
         elif self.loss_function == 'range':
             min_value, max_value = 0, 4000
             values_to_transform = [[min_value], [max_value]]
             scaled_values = scaler[1].transform(values_to_transform)
             scaled_min_value = scaled_values[0][0]
             scaled_max_value = scaled_values[1][0]
-            loss_func = lf.get(self.loss_function)(self.theta, scaled_min_value, scaled_max_value)
-            model.compile(loss=loss_func, optimizer=opt,
-                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+            loss_func = LossRange(self.theta, scaled_min_value, scaled_max_value)
+            loss_metric = MetricLossRange(self.theta, scaled_min_value, scaled_max_value)
+            metrics.append(loss_metric)
         elif self.loss_function == 'diff_range':
             min_value, max_value = -self.steepness, self.steepness
             values_to_transform = [[min_value], [max_value]]
             scaled_values = scaler[1].transform(values_to_transform)
             scaled_min_value = scaled_values[0][0]
             scaled_max_value = scaled_values[1][0]
-            loss_func = lf.get(self.loss_function)(self.theta, scaled_min_value, scaled_max_value)
-            model.compile(loss=loss_func, optimizer=opt,
-                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+            loss_func = LossDiffRange(self.theta, scaled_min_value, scaled_max_value)
+            loss_metric = MetricLossDiffRange(self.theta, scaled_min_value, scaled_max_value)
+            metrics.append(loss_metric)
         elif self.loss_function == 'mse_diff':
-            loss_func = lf.get(self.loss_function)(self.theta)
-            model.compile(loss=loss_func, optimizer=opt,
-                          metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()])
+            loss_func = LossMseDiff(self.theta)
+            loss_metric = MetricLossMseDiff(self.theta)
+            metrics.append(loss_metric)
         elif self.loss_function == 'two_state':
-            loss_func = lf.get(self.loss_function)(
-                theta=self.theta,
-                steepness=scaler[1].transform([[self.steepness]])[0][0]
-            )
-            model.compile(
-                loss=loss_func,
-                optimizer=opt,
-                metrics=[metrics.RootMeanSquaredError(), metrics.MeanSquaredError()],
-            )
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = LossTwoState(self.theta, st)
+            loss_metric = MetricLossTwoState(self.theta, st)
+            metrics.append(loss_metric)
+        model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
 
-
-    def train(self, x_train, y_train, epochs,  x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=True):
+    def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=False):
         """
         Train the model.
         :param x_train: The training data.
@@ -187,7 +179,6 @@ class Model:
         :param loss_batch_history: The training history over each batch for all epochs.
         """
         history_dict = {}
-        batch_history_dict = {}
         history_dict["loss"] = np.array(history.history["loss"])
         history_dict["val_loss"] = np.array(history.history["val_loss"])
         history_dict["rmse"] = np.array(history.history["root_mean_squared_error"])
@@ -195,20 +186,13 @@ class Model:
         history_dict["mse"] = np.array(history.history["mean_squared_error"])
         history_dict["val_mse"] = np.array(history.history["val_mean_squared_error"])
         history_dict["epoch"] = np.arange(1, len(history_dict["loss"]) + 1)
-        batch_history_dict["loss"] = np.array(loss_batch_history.history["loss"])
-        batch_history_dict["mse"] = np.array(loss_batch_history.history["mse"])
-        n_batches = len(batch_history_dict["loss"]) // len(history_dict["epoch"])
-        batch_history_dict["epoch"] = np.repeat(history_dict["epoch"], n_batches)
-        batch_history_dict["batch"] = np.tile(np.arange(1, n_batches + 1), len(history_dict["epoch"]))
-        if self.loss_function != "mean_squared_error":
-            #history_dict["physical_metric"] = np.array(history.history["loss_function"])
-            #history_dict["val_physical_metric"] = np.array(history.history["val_loss_function"])
-            batch_history_dict["physical_loss"] = np.array(loss_batch_history.history["physical_loss"])
+
+        if self.loss_function == "mean_squared_error":
+            loss_batch_history.history.pop("loss_tgds", None)
         self.best_epoch = np.argmin(history_dict["val_loss"]) + 1
         history_df = pd.DataFrame.from_records(history_dict)
         history_df.to_csv(self.results_folder + "History/history.csv", index=False)
-        batch_history_df = pd.DataFrame.from_records(batch_history_dict)
-        batch_history_df = batch_history_df[(batch_history_df["loss"] != -1) & (batch_history_df["mse"] != -1)]
+        batch_history_df = pd.DataFrame(loss_batch_history.history)
         batch_history_df.to_csv(self.results_folder + "History/batch_history.csv", index=False)
 
     def load_best_model(self):
@@ -238,11 +222,11 @@ class Model:
                 create_prediction_plot(
                     data[i]["time"],
                     data[i]["el_power"],
-                    data[i]["time"][-len(preds) :],
+                    data[i]["time"][-len(preds):],
                     preds,
                     image_folder=self.results_folder + "Images/",
                     title=f"Predictions using {self.approach} on sample {index[i]} with model trained "
-                    + f"on {dataset.n_train_samples} {dataset.data_type} sets",
+                          + f"on {dataset.n_train_samples} {dataset.data_type} sets",
                     sample_name=index[i],
                     dataset_type=dataset_type,
                     show_plot=show_plot,
@@ -250,11 +234,11 @@ class Model:
 
                 result_true_pred.loc[len(result_true_pred)] = [
                     index[i],
-                    data[i]["el_power"].to_list()[-len(preds) :],
+                    data[i]["el_power"].to_list()[-len(preds):],
                     preds.tolist(),
                 ]
 
-                results_ex = self._measure_metrics(data[i]["el_power"][-len(preds) :], preds)
+                results_ex = self._measure_metrics(data[i]["el_power"][-len(preds):], preds)
                 results.at[index[i], "mse"] = results_ex["MSE"]
                 results.at[index[i], "rmse"] = results_ex["RMSE"]
                 results.at[index[i], "r2"] = results_ex["R2"]
@@ -321,7 +305,7 @@ class Model:
             :return: The array without the 5% best and worst values.
             """
             arr_sorted = sorted(arr)
-            return arr_sorted[round(len(arr_sorted) * 0.05) : round(len(arr_sorted) * 0.95)]
+            return arr_sorted[round(len(arr_sorted) * 0.05): round(len(arr_sorted) * 0.95)]
 
         results_train = pd.read_csv(self.results_folder + "results_train.csv")
         train_mean = round(np.mean(delete_best_worst(results_train["rmse"])), 3)
@@ -333,9 +317,9 @@ class Model:
         test_std = round(np.std(delete_best_worst(results_test["rmse"])), 3)
         experiment_result += "\nRMSE (over all test samples): " + str(test_mean) + " ±(" + str(test_std) + ")"
 
-        #experiment_result += "\nBest Epoch: " + str(self.best_epoch)
-        #experiment_result += "\nTraining Time: " + str(self.dur_train)
-        #experiment_result += "\nPrediction Time: " + str(self.dur_predict)
+        # experiment_result += "\nBest Epoch: " + str(self.best_epoch)
+        # experiment_result += "\nTraining Time: " + str(self.dur_train)
+        # experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
         print(experiment_result)
         self._save_result()
@@ -345,9 +329,9 @@ class Model:
         Save the results of the experiment in a json file.
         """
         result = {
-            #"best_epoch": int(self.best_epoch),
-            #"train_time": str(self.dur_train),
-            #"predict_time": str(self.dur_predict),
+            # "best_epoch": int(self.best_epoch),
+            # "train_time": str(self.dur_train),
+            # "predict_time": str(self.dur_predict),
             "train_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
             "train_rmse_std": round(np.std(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
             "test_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_test.csv")["rmse"]), 3),
