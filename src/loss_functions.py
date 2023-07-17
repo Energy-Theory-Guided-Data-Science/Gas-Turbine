@@ -33,7 +33,7 @@ class LossTwoState(tf.keras.losses.Loss):
 
         tgds_loss = tf.minimum(tgds_loss_static, tgds_loss_trans)
 
-        loss = loss1 + self.theta * tgds_loss
+        loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
 
         return loss
 
@@ -63,7 +63,7 @@ class LossMseDiff(tf.keras.losses.Loss):
 
         tgds_loss = criterion(y_true_difference, y_pred_difference)
 
-        loss = loss1 + self.theta * tgds_loss
+        loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
 
         return loss
 
@@ -87,7 +87,7 @@ class LossRange(tf.keras.losses.Loss):
         out_of_range_high = tf.cast(y_predicted > self.max_value, dtype=tf.float32) * (y_predicted - self.max_value)
         range_loss = criterion(out_of_range_low + out_of_range_high, tf.zeros_like(y_predicted))
 
-        loss = loss1 + self.theta * range_loss
+        loss = (1 - self.theta) * loss1 + self.theta * range_loss
 
         return loss
 
@@ -118,6 +118,6 @@ class LossDiffRange(tf.keras.losses.Loss):
                 y_difference - self.max_value)
         diff_loss = criterion(out_of_range_diff_low + out_of_range_diff_high, tf.zeros_like(y_difference))
 
-        loss = loss1 + self.theta * diff_loss
+        loss = (1 - self.theta) * loss1 + self.theta * diff_loss
 
         return loss

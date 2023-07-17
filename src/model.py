@@ -28,15 +28,17 @@ class Model:
             scaler,
             steepness,
             input_shape,
-            neurons=256,
+            neurons=64,
             learning_rate=0.001,
-            theta=100,
+            theta=0.5,
             batch_size=8,
             gpu=0,
             verbose=True,
             seed=42,
             ex_name="Test",
             results_folder=None,
+            dropout_rate=0.2,
+            n_lstm_layers=1,
     ):
         """
         Initialize the model.
@@ -60,6 +62,8 @@ class Model:
         if gpu != -1:
             tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
             tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
+        self.dropout_rate = dropout_rate
+        self.n_lstm_layers = n_lstm_layers
         self.verbose = verbose
         self.neurons = neurons
         self.learning_rate = learning_rate
@@ -79,12 +83,22 @@ class Model:
         kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
-        model.add(layers.Input(shape=input_shape))
-        model.add(layers.LSTM(self.neurons, kernel_regularizer=kernel_reg, stateful=False, return_sequences=False))
-        model.add(layers.Dense(self.neurons // 2, kernel_regularizer=kernel_reg, activation="relu"))
-        model.add(layers.Dense(1, kernel_regularizer=kernel_reg, activation="linear"))
+        if self.n_lstm_layers == 1:
+            model.add(layers.LSTM(self.neurons, input_shape=input_shape, return_sequences=False))
+        else:
+            model.add(layers.LSTM(self.neurons, input_shape=input_shape, return_sequences=True))
+            model.add(layers.Dropout(self.dropout_rate))
+            for i in range(self.n_lstm_layers - 2):
+                model.add(layers.LSTM(self.neurons, return_sequences=True))
+                model.add(layers.Dropout(self.dropout_rate))
+            model.add(layers.LSTM(self.neurons, return_sequences=False))
+        model.add(layers.Dropout(self.dropout_rate))
+        model.add(layers.Dense(self.neurons // 2, activation="relu"))
+        model.add(layers.Dropout(self.dropout_rate))
+        model.add(layers.Dense(1, activation="sigmoid"))
 
-        opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
+        #opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
+        opt = optimizers.Adam(learning_rate=self.learning_rate, clipnorm=1.0)
 
         metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
         if self.loss_function == "mean_squared_error":
@@ -119,7 +133,8 @@ class Model:
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
 
-    def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=False):
+    def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=False,
+              get_history=False):
         """
         Train the model.
         :param x_train: The training data.
@@ -171,6 +186,9 @@ class Model:
         self.dur_train = datetime.now() - start_train
         self._save_history(history, loss_batch_history)
         self.load_best_model()
+
+        if get_history:
+            return history
 
     def _save_history(self, history, loss_batch_history):
         """

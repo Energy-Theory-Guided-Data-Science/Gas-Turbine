@@ -28,14 +28,17 @@ class Dataset:
         self.seed = seed
         if self.data_type == "experiment":
             self.steepness = 6.388
-            if test_samples is None:
-                self.test_samples = ["4", "22"]
-            else:
-                self.test_samples = test_samples
         elif steepness is None:
             raise ValueError("Steepness must be specified for synthetic data")
         else:
             self.steepness = steepness
+        if test_samples is None:
+            if self.data_type == "synthetic":
+                self.test_samples = [str(i) for i in range(100, 300)]
+            elif self.data_type == "experiment":
+                self.test_samples = ["4", "22"]
+        else:
+            self.test_samples = test_samples
         self.n_train_samples = n_train_samples
         self.train_frame = None
         if self.data_type == "synthetic":
@@ -57,6 +60,7 @@ class Dataset:
         self._get_lag(folder)
         np.random.seed(self.seed)
         self.train_indices = np.random.choice(range(100), self.n_train_samples, replace=False)
+        self.test_indices = [index for index, value in enumerate(self.data_names) if value in self.test_samples]
 
     def _get_experiment_data(self):
         """
