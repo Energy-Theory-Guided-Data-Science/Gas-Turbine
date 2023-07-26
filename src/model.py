@@ -5,8 +5,8 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import LossTwoState, LossRange, LossMseDiff, LossDiffRange
-from src.loss_metrics import MetricLossTwoState, MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
+from src.loss_functions import LossTwoState, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, LossMseDiff, LossDiffRange
+from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, MetricLossTwoStateDiffRange, MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
 import sklearn.metrics
@@ -28,17 +28,15 @@ class Model:
             scaler,
             steepness,
             input_shape,
-            neurons=64,
+            neurons=256,
             learning_rate=0.001,
-            theta=0.5,
+            theta=100,
             batch_size=8,
-            gpu=0,
+            gpu=1,
             verbose=True,
             seed=42,
             ex_name="Test",
             results_folder=None,
-            dropout_rate=0.2,
-            n_lstm_layers=1,
     ):
         """
         Initialize the model.
@@ -62,8 +60,6 @@ class Model:
         if gpu != -1:
             tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
             tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
-        self.dropout_rate = dropout_rate
-        self.n_lstm_layers = n_lstm_layers
         self.verbose = verbose
         self.neurons = neurons
         self.learning_rate = learning_rate
@@ -83,22 +79,12 @@ class Model:
         kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
-        if self.n_lstm_layers == 1:
-            model.add(layers.LSTM(self.neurons, input_shape=input_shape, return_sequences=False))
-        else:
-            model.add(layers.LSTM(self.neurons, input_shape=input_shape, return_sequences=True))
-            model.add(layers.Dropout(self.dropout_rate))
-            for i in range(self.n_lstm_layers - 2):
-                model.add(layers.LSTM(self.neurons, return_sequences=True))
-                model.add(layers.Dropout(self.dropout_rate))
-            model.add(layers.LSTM(self.neurons, return_sequences=False))
-        model.add(layers.Dropout(self.dropout_rate))
-        model.add(layers.Dense(self.neurons // 2, activation="relu"))
-        model.add(layers.Dropout(self.dropout_rate))
-        model.add(layers.Dense(1, activation="sigmoid"))
+        model.add(layers.Input(shape=input_shape))
+        model.add(layers.LSTM(self.neurons, kernel_regularizer=kernel_reg, stateful=False, return_sequences=False))
+        model.add(layers.Dense(self.neurons // 2, kernel_regularizer=kernel_reg, activation="relu"))
+        model.add(layers.Dense(1, kernel_regularizer=kernel_reg, activation="linear"))
 
-        #opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
-        opt = optimizers.Adam(learning_rate=self.learning_rate, clipnorm=1.0)
+        opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
 
         metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
         if self.loss_function == "mean_squared_error":
@@ -130,6 +116,17 @@ class Model:
             loss_func = LossTwoState(self.theta, st)
             loss_metric = MetricLossTwoState(self.theta, st)
             metrics.append(loss_metric)
+        elif self.loss_function == 'weighted_two_state':
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = WeightedLossTwoState(self.theta, st, tgds_ratio)
+            loss_metric = MetricWeightedLossTwoState(self.theta, st)
+            metrics.append(loss_metric)
+        elif self.loss_function == 'two_state_diff_range':
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = LossTwoStateDiffRange(self.theta, st, tgds_ratio)
+            loss_metric = MetricLossTwoStateDiffRange(self.theta, st)
+            metrics.append(loss_metric)            
+            
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
 
@@ -271,8 +268,8 @@ class Model:
 
         data_test, names_test = [], []
         if dataset.data_type == "synthetic":
-            data_test = dataset.data[-200:]
-            names_test = dataset.data_names[-200:]
+            data_test = dataset.data[-1:]
+            names_test = dataset.data_names[-1:]
         elif dataset.data_type == "experiment":
             data_test = [dataset.data[i] for i in dataset.test_indices]
             names_test = dataset.test_samples
