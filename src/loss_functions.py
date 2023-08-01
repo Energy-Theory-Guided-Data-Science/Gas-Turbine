@@ -10,10 +10,11 @@ class LossTwoState(tf.keras.losses.Loss):
         :param steepness: Expected steepness of the true values.
     """
 
-    def __init__(self, theta, steepness, name="loss_two_state"):
+    def __init__(self, theta, steepness, normalized=False, name="loss_two_state"):
         super().__init__(name=name)
         self.theta = theta
         self.steepness = steepness
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -33,7 +34,10 @@ class LossTwoState(tf.keras.losses.Loss):
 
         tgds_loss = tf.minimum(tgds_loss_static, tgds_loss_trans)
 
-        loss = loss1 + self.theta * tgds_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
+        else:
+            loss = loss1 + self.theta * tgds_loss
 
         return loss
 
@@ -47,10 +51,11 @@ class LossTwoState2(tf.keras.losses.Loss):
         :param steepness: Expected steepness of the true values.
     """
 
-    def __init__(self, theta, steepness, name="loss_two_state_2"):
+    def __init__(self, theta, steepness, normalized=False, name="loss_two_state_2"):
         super().__init__(name=name)
         self.theta = theta
         self.steepness = steepness
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -70,7 +75,10 @@ class LossTwoState2(tf.keras.losses.Loss):
 
         tgds_loss = tf.minimum(tgds_loss_static, tgds_loss_trans)
 
-        loss = loss1 + self.theta * tgds_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
+        else:
+            loss = loss1 + self.theta * tgds_loss
 
         return loss
 
@@ -85,11 +93,12 @@ class WeightedLossTwoState(tf.keras.losses.Loss):
         :param tgds_ratio: ratio between the static parts and transitions.
     """
 
-    def __init__(self, theta, steepness, tgds_ratio=1, name="loss_weighted_two_state"):
+    def __init__(self, theta, steepness, tgds_ratio=1, normalized=False, name="loss_weighted_two_state"):
         super().__init__(name=name)
         self.theta = theta
         self.steepness = steepness
         self.tgds_ratio = tgds_ratio
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -112,18 +121,22 @@ class WeightedLossTwoState(tf.keras.losses.Loss):
 
         tgds_loss = tf.minimum(alpha * tgds_loss_static, beta * tgds_loss_trans)
 
-        loss = loss1 + self.theta * tgds_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
+        else:
+            loss = loss1 + self.theta * tgds_loss
 
         return loss
 
 
 class LossTwoStateDiffRange(tf.keras.losses.Loss):
-    def __init__(self, theta, min_value, max_value, tgds_ratio=1, name="loss_two_state_diff_range"):
+    def __init__(self, theta, min_value, max_value, tgds_ratio=1, normalized=False, name="loss_two_state_diff_range"):
         super().__init__(name=name)
         self.theta = theta
         self.min_value = min_value
         self.max_value = max_value
         self.tgds_ratio = tgds_ratio
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -154,15 +167,19 @@ class LossTwoStateDiffRange(tf.keras.losses.Loss):
 
         tgds_loss = tf.minimum(alpha * tgds_loss_static, beta * tgds_loss_trans)
 
-        loss = loss1 + self.theta * tgds_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
+        else:
+            loss = loss1 + self.theta * tgds_loss
 
         return loss
 
 
 class LossMseDiff(tf.keras.losses.Loss):
-    def __init__(self, theta, name="loss_mse_diff"):
+    def __init__(self, theta, normalized=False, name="loss_mse_diff"):
         super().__init__(name=name)
         self.theta = theta
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -184,17 +201,21 @@ class LossMseDiff(tf.keras.losses.Loss):
 
         tgds_loss = criterion(y_true_difference, y_pred_difference)
 
-        loss = loss1 + self.theta * tgds_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * tgds_loss
+        else:
+            loss = loss1 + self.theta * tgds_loss
 
         return loss
 
 
 class LossRange(tf.keras.losses.Loss):
-    def __init__(self, theta, min_value, max_value, name="loss_range"):
+    def __init__(self, theta, min_value, max_value, normalized=False, name="loss_range"):
         super().__init__(name=name)
         self.theta = theta
         self.min_value = min_value
         self.max_value = max_value
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -208,17 +229,21 @@ class LossRange(tf.keras.losses.Loss):
         out_of_range_high = tf.cast(y_predicted > self.max_value, dtype=tf.float32) * (y_predicted - self.max_value)
         range_loss = criterion(out_of_range_low + out_of_range_high, tf.zeros_like(y_predicted))
 
-        loss = loss1 + self.theta * range_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * range_loss
+        else:
+            loss = loss1 + self.theta * range_loss
 
         return loss
 
 
 class LossDiffRange(tf.keras.losses.Loss):
-    def __init__(self, theta, min_value, max_value, name="loss_diff_range"):
+    def __init__(self, theta, min_value, max_value, normalized=False, name="loss_diff_range"):
         super().__init__(name=name)
         self.theta = theta
         self.min_value = min_value
         self.max_value = max_value
+        self.normalized = normalized
 
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1])
@@ -239,6 +264,9 @@ class LossDiffRange(tf.keras.losses.Loss):
                 y_difference - self.max_value)
         diff_loss = criterion(out_of_range_diff_low + out_of_range_diff_high, tf.zeros_like(y_difference))
 
-        loss = loss1 + self.theta * diff_loss
+        if self.normalized:
+            loss = (1 - self.theta) * loss1 + self.theta * diff_loss
+        else:
+            loss = loss1 + self.theta * diff_loss
 
         return loss

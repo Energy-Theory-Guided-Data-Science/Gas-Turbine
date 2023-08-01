@@ -5,8 +5,10 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import LossTwoState, LossTwoState2, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, LossMseDiff, LossDiffRange
-from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, MetricLossTwoStateDiffRange, MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
+from src.loss_functions import LossTwoState, LossTwoState2, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, \
+    LossMseDiff, LossDiffRange
+from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, MetricLossTwoStateDiffRange, \
+    MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
 import sklearn.metrics
@@ -29,7 +31,9 @@ class Model:
                  input_shape,
                  neurons=32,
                  learning_rate=0.001,
-                 theta=0.9996,
+                 theta=0.5,
+                 tgds_ratio=0.5,
+                 loss_normalized=False,
                  batch_size=128,
                  gpu=0,
                  verbose=True,
@@ -50,6 +54,7 @@ class Model:
         :param learning_rate: The learning rate used for the model. Default is 0.001.
         :param theta: The lambda value (weight) of the domain knowledge part in the general loss function.
         Only used if loss_function is "custom". Default is 100.
+        :param loss_normalized: If True, the loss parts are normalized using (1-theta) and theta weights. Default is False.
         :param batch_size: The batch size used for the model. Default is 8.
         :param gpu: The GPU ID used for the model. If set to -1, the CPU is used.
         :param verbose: If True, the training process is printed to the console.
@@ -73,6 +78,8 @@ class Model:
         self.neurons = neurons
         self.learning_rate = learning_rate
         self.theta = theta
+        self.tgds_ratio = tgds_ratio
+        self.loss_normalized = loss_normalized
         self.steepness = steepness
         self.batch_size = batch_size
         self.results_folder = results_folder
@@ -106,7 +113,7 @@ class Model:
             scaled_values = scaler[1].transform(values_to_transform)
             scaled_min_value = scaled_values[0][0]
             scaled_max_value = scaled_values[1][0]
-            loss_func = LossRange(self.theta, scaled_min_value, scaled_max_value)
+            loss_func = LossRange(self.theta, scaled_min_value, scaled_max_value, self.loss_normalized)
             loss_metric = MetricLossRange(self.theta, scaled_min_value, scaled_max_value)
             metrics.append(loss_metric)
         elif self.loss_function == 'diff_range':
@@ -115,31 +122,31 @@ class Model:
             scaled_values = scaler[1].transform(values_to_transform)
             scaled_min_value = scaled_values[0][0]
             scaled_max_value = scaled_values[1][0]
-            loss_func = LossDiffRange(self.theta, scaled_min_value, scaled_max_value)
+            loss_func = LossDiffRange(self.theta, scaled_min_value, scaled_max_value, self.loss_normalized)
             loss_metric = MetricLossDiffRange(self.theta, scaled_min_value, scaled_max_value)
             metrics.append(loss_metric)
         elif self.loss_function == 'mse_diff':
-            loss_func = LossMseDiff(self.theta)
+            loss_func = LossMseDiff(self.theta, self.loss_normalized)
             loss_metric = MetricLossMseDiff(self.theta)
             metrics.append(loss_metric)
         elif self.loss_function == 'two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoState(self.theta, st)
+            loss_func = LossTwoState(self.theta, st, self.loss_normalized)
             loss_metric = MetricLossTwoState(self.theta, st)
             metrics.append(loss_metric)
         elif self.loss_function == 'two_state_2':
             st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoState2(self.theta, st)
+            loss_func = LossTwoState2(self.theta, st, self.loss_normalized)
             loss_metric = MetricLossTwoState(self.theta, st)
             metrics.append(loss_metric)
         elif self.loss_function == 'weighted_two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = WeightedLossTwoState(self.theta, st, tgds_ratio)
+            loss_func = WeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_normalized)
             loss_metric = MetricWeightedLossTwoState(self.theta, st)
             metrics.append(loss_metric)
         elif self.loss_function == 'two_state_diff_range':
             st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoStateDiffRange(self.theta, st, tgds_ratio)
+            loss_func = LossTwoStateDiffRange(self.theta, st, self.tgds_ratio, self.loss_normalized)
             loss_metric = MetricLossTwoStateDiffRange(self.theta, st)
             metrics.append(loss_metric)
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
@@ -281,13 +288,8 @@ class Model:
 
         start_predict = datetime.now()
 
-        data_test, names_test = [], []
-        if dataset.data_type == "synthetic":
-            data_test = dataset.data[-1:]
-            names_test = dataset.data_names[-1:]
-        elif dataset.data_type == "experiment":
-            data_test = [dataset.data[i] for i in dataset.test_indices]
-            names_test = dataset.test_samples
+        data_test = [dataset.data[i] for i in dataset.test_indices]
+        names_test = dataset.test_samples
 
         create_predictions("test", data_test, names_test)
         create_predictions(

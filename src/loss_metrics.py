@@ -35,7 +35,8 @@ class MetricLossTwoState(tf.keras.metrics.Metric):
     def reset_state(self):
         self.total.assign(0.)
         self.count.assign(0.)
-        
+
+
 class MetricWeightedLossTwoState(tf.keras.metrics.Metric):
     def __init__(self, theta, steepness, tgds_ratio=1, name="loss_tgds", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -59,12 +60,11 @@ class MetricWeightedLossTwoState(tf.keras.metrics.Metric):
         tgds_error_static = tf.math.squared_difference(y_difference, tf.zeros_like(y_difference))
         tgds_squared_sum_static = tf.reduce_sum(tgds_error_static)
 
-        
-        #alpha/beta = static/transition
-        beta = 1 / (tgds_ratio + 1)
-        alpha = 1 - beta 
-        
-        tgds_squared_sum = tf.minimum(alpha*tgds_squared_sum_trans, beta*tgds_squared_sum_static)
+        # alpha/beta = static/transition
+        beta = 1 / (self.tgds_ratio + 1)
+        alpha = 1 - beta
+
+        tgds_squared_sum = tf.minimum(alpha * tgds_squared_sum_trans, beta * tgds_squared_sum_static)
         count = tf.cast(tf.shape(y_difference)[0], dtype=tf.float32)
 
         self.total.assign_add(tgds_squared_sum)
@@ -75,9 +75,9 @@ class MetricWeightedLossTwoState(tf.keras.metrics.Metric):
 
     def reset_state(self):
         self.total.assign(0.)
-        self.count.assign(0.)        
+        self.count.assign(0.)
 
-        
+
 class MetricLossTwoStateDiffRange(tf.keras.metrics.Metric):
     def __init__(self, theta, min_value, max_value, tgds_ratio=1, name="loss_tgds", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -94,7 +94,7 @@ class MetricLossTwoStateDiffRange(tf.keras.metrics.Metric):
 
         y_shifted = tf.roll(y_pred, shift=1, axis=0)
         y_difference = tf.cond(tf.size(y_true) > 1,
-                               lambda: tf.abs(y_predicted[1:] - y_shifted[1:]),
+                               lambda: tf.abs(y_pred[1:] - y_shifted[1:]),
                                lambda: tf.constant([0.0], dtype=tf.float32))
 
         out_of_range_diff_low = tf.cast(y_difference < self.min_value, dtype=tf.float32) * (
@@ -102,21 +102,18 @@ class MetricLossTwoStateDiffRange(tf.keras.metrics.Metric):
         out_of_range_diff_high = tf.cast(y_difference > self.max_value, dtype=tf.float32) * (
                 y_difference - self.max_value)
 
-        
         tgds_error_trans = tf.math.squared_difference(out_of_range_diff_low + out_of_range_diff_high,
-                                                tf.zeros_like(y_difference))
+                                                      tf.zeros_like(y_difference))
         tgds_squared_sum_trans = tf.reduce_sum(tgds_error_trans)
-      
-               
+
         tgds_error_static = tf.math.squared_difference(y_difference, tf.zeros_like(y_difference))
         tgds_squared_sum_static = tf.reduce_sum(tgds_error_static)
 
-        
-        #alpha/beta = static/transition
-        beta = 1 / (tgds_ratio + 1)
-        alpha = 1 - beta 
-        
-        tgds_squared_sum = tf.minimum(alpha*tgds_squared_sum_trans, beta*tgds_squared_sum_static)        
+        # alpha/beta = static/transition
+        beta = 1 / (self.tgds_ratio + 1)
+        alpha = 1 - beta
+
+        tgds_squared_sum = tf.minimum(alpha * tgds_squared_sum_trans, beta * tgds_squared_sum_static)
         count = tf.cast(tf.shape(y_difference)[0], dtype=tf.float32)
 
         self.total.assign_add(tgds_squared_sum)
@@ -127,7 +124,8 @@ class MetricLossTwoStateDiffRange(tf.keras.metrics.Metric):
 
     def reset_state(self):
         self.total.assign(0.)
-        self.count.assign(0.)        
+        self.count.assign(0.)
+
 
 class MetricLossMseDiff(tf.keras.metrics.Metric):
     def __init__(self, theta, name="loss_tgds", **kwargs):
