@@ -1,7 +1,8 @@
-from datetime import datetime
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
+import time
+import random
 
 
 def create_results_folder(data_type, approach):
@@ -11,10 +12,14 @@ def create_results_folder(data_type, approach):
     :param approach: The approach used for the experiment (e.g. "loss_function" or "data_baseline").
     :return: The path to the folder.
     """
-    time = datetime.now()
-    folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
-    results_folder = f"Results/{approach}/" + folder_name
-    os.makedirs(results_folder)
+    while True:
+        folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
+        results_folder = f"Results/{approach}/" + folder_name
+        if not os.path.exists(results_folder):
+            os.makedirs(results_folder)
+            break
+        else:
+            time.sleep(random.randint(5, 10))
     results_folder_images = results_folder + "Images/"
     os.makedirs(results_folder_images)
     results_folder_model = results_folder + "Model/"
