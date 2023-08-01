@@ -5,7 +5,7 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import LossTwoState, LossRange, LossMseDiff, LossDiffRange
+from src.loss_functions import LossTwoState, LossTwoState2, LossRange, LossMseDiff, LossDiffRange
 from src.loss_metrics import MetricLossTwoState, MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
@@ -21,25 +21,23 @@ class Model:
     Class for creating, training and evaluation of the model.
     """
 
-    def __init__(
-            self,
-            data_type,
-            loss_function,
-            scaler,
-            steepness,
-            input_shape,
-            neurons=64,
-            learning_rate=0.001,
-            theta=0.5,
-            batch_size=8,
-            gpu=0,
-            verbose=True,
-            seed=42,
-            ex_name="Test",
-            results_folder=None,
-            dropout_rate=0.2,
-            n_lstm_layers=1,
-    ):
+    def __init__(self,
+                 data_type,
+                 loss_function,
+                 scaler,
+                 steepness,
+                 input_shape,
+                 neurons=32,
+                 learning_rate=0.001,
+                 theta=0.9996,
+                 batch_size=128,
+                 gpu=0,
+                 verbose=True,
+                 seed=42,
+                 results_folder=None,
+                 dropout_rate=0.25,
+                 n_lstm_layers=3,
+                 ex_name="Test"):
         """
         Initialize the model.
         :param data_type: The type of data used for the model (e.g. "experiment" or "synthetic").
@@ -59,27 +57,27 @@ class Model:
         :param ex_name: The name of the experiment. Default is "Test".
         """
         # tf.random.set_seed(seed)
-        if gpu != -1:
-            tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
-            tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
+        # if gpu != -1:
+        #    tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
+        #    tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
+        self.ex_name = ex_name
+        self.seed = seed
+        self.loss_function = loss_function
+        if self.loss_function == "mean_squared_error":
+            self.approach = "Data_Baseline"
+        else:
+            self.approach = "Loss_Function"
         self.dropout_rate = dropout_rate
         self.n_lstm_layers = n_lstm_layers
         self.verbose = verbose
         self.neurons = neurons
         self.learning_rate = learning_rate
-        self.loss_function = loss_function
         self.theta = theta
         self.steepness = steepness
         self.batch_size = batch_size
-        if self.loss_function == "mean_squared_error":
-            self.approach = "Data_Baseline"
-        else:
-            self.approach = "Loss_Function"
         self.results_folder = results_folder
         if results_folder is None:
             self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
-        self.ex_name = ex_name
-        self.seed = seed
         kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
@@ -94,11 +92,10 @@ class Model:
             model.add(layers.LSTM(self.neurons, return_sequences=False))
         model.add(layers.Dropout(self.dropout_rate))
         model.add(layers.Dense(self.neurons // 2, activation="relu"))
-        model.add(layers.Dropout(self.dropout_rate))
-        model.add(layers.Dense(1, activation="sigmoid"))
+        model.add(layers.Dense(1, activation="linear"))
 
-        #opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
-        opt = optimizers.Adam(learning_rate=self.learning_rate, clipnorm=1.0)
+        # opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
+        opt = optimizers.Adam(learning_rate=self.learning_rate)
 
         metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
         if self.loss_function == "mean_squared_error":
@@ -128,6 +125,11 @@ class Model:
         elif self.loss_function == 'two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
             loss_func = LossTwoState(self.theta, st)
+            loss_metric = MetricLossTwoState(self.theta, st)
+            metrics.append(loss_metric)
+        elif self.loss_function == 'two_state_2':
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = LossTwoState2(self.theta, st)
             loss_metric = MetricLossTwoState(self.theta, st)
             metrics.append(loss_metric)
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
@@ -311,7 +313,7 @@ class Model:
         results["MaxAE"] = maxae
         return results
 
-    def get_result(self):
+    def get_result(self, print_result=False):
         """
         Get the results of the prediction. The results are saved in the results folder and printed to the console.
         """
@@ -339,7 +341,8 @@ class Model:
         # experiment_result += "\nTraining Time: " + str(self.dur_train)
         # experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
-        print(experiment_result)
+        if print_result:
+            print(experiment_result)
         self._save_result()
 
     def _save_result(self):
