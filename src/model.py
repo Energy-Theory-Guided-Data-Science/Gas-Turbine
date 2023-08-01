@@ -62,9 +62,9 @@ class Model:
         :param ex_name: The name of the experiment. Default is "Test".
         """
         # tf.random.set_seed(seed)
-        # if gpu != -1:
-        #    tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
-        #    tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
+        if gpu != -1:
+            tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
+            tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
         self.ex_name = ex_name
         self.seed = seed
         self.loss_function = loss_function
@@ -142,12 +142,12 @@ class Model:
         elif self.loss_function == 'weighted_two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
             loss_func = WeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_normalized)
-            loss_metric = MetricWeightedLossTwoState(self.theta, st)
+            loss_metric = MetricWeightedLossTwoState(self.theta, st, self.tgds_ratio)
             metrics.append(loss_metric)
         elif self.loss_function == 'two_state_diff_range':
             st = scaler[1].transform([[self.steepness]])[0][0]
             loss_func = LossTwoStateDiffRange(self.theta, st, self.tgds_ratio, self.loss_normalized)
-            loss_metric = MetricLossTwoStateDiffRange(self.theta, st)
+            loss_metric = MetricLossTwoStateDiffRange(self.theta, st, self.tgds_ratio)
             metrics.append(loss_metric)
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
