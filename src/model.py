@@ -389,14 +389,17 @@ class Model:
             "batch_size": self.batch_size,
             "learning_rate": self.learning_rate,
             "neurons": self.neurons,
+            "dropout": self.dropout_rate, 
             "lambda": self.theta,
             "steepness_loss": self.steepness,
             "data_type": dataset.data_type,
-            "steepness": dataset.steepness,
+            "steepness_data": dataset.steepness,
             "n_train_samples": dataset.n_train_samples,
             "train_samples": [dataset.data_names[i] for i in dataset.train_indices],
             "lookback": dataset.lag,
-            "test_samples": dataset.test_samples
+            "test_samples": dataset.test_samples,
+            "tgds_ratio": self.tgds_ratio,
+            "loss_normalized": self.loss_normalized,
         }
         with open(self.results_folder + "config.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
