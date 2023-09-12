@@ -11,6 +11,7 @@ from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, Met
     MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
+from src.check_outlier import CheckOutlier
 import sklearn.metrics
 import json
 import os
@@ -25,6 +26,7 @@ class Model:
 
     def __init__(self,
                  data_type,
+                 n_train_samples,
                  loss_function,
                  scaler,
                  steepness,
@@ -83,6 +85,8 @@ class Model:
         self.steepness = steepness
         self.batch_size = batch_size
         self.results_folder = results_folder
+        self.scaler = scaler
+        self.n_train_samples = n_train_samples
         if results_folder is None:
             self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
         kernel_reg = regularizers.l2(0.05)
@@ -191,6 +195,10 @@ class Model:
                 callbacks=callbacks,
             )
         else:
+            config = {'loss_function': self.loss_function, 'theta': self.theta, 'train_size': self.n_train_samples}
+            check_outlier = CheckOutlier(validation_data=(x_val, y_val), scaler=self.scaler, config=config)
+            callbacks.append(check_outlier)
+
             history = self.model.fit(
                 x_train,
                 y_train,
@@ -226,6 +234,9 @@ class Model:
 
         if self.loss_function == "mean_squared_error":
             loss_batch_history.history.pop("loss_tgds", None)
+        else:
+            history_dict["loss_tgds"] = np.array(history.history["loss_tgds"])
+            history_dict["val_loss_tgds"] = np.array(history.history["val_loss_tgds"])
         self.best_epoch = np.argmin(history_dict["val_loss"]) + 1
         history_df = pd.DataFrame.from_records(history_dict)
         history_df.to_csv(self.results_folder + "History/history.csv", index=False)
@@ -325,7 +336,7 @@ class Model:
         results["MaxAE"] = maxae
         return results
 
-    def get_result(self, print_result=False):
+    def get_result(self, print_result=False, check=False):
         """
         Get the results of the prediction. The results are saved in the results folder and printed to the console.
         """
@@ -353,9 +364,33 @@ class Model:
         # experiment_result += "\nTraining Time: " + str(self.dur_train)
         # experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
+        if check:
+            flag = False
+
+            if self.loss_function == 'mean_squared_error':
+                flag |= (int(self.n_train_samples) == 1) and (test_mean < 335)
+                flag |= (int(self.n_train_samples) == 2) and (test_mean < 280)
+                flag |= (int(self.n_train_samples) == 3) and (test_mean < 260)
+                flag |= (int(self.n_train_samples) == 4) and (test_mean < 220)
+                flag |= (int(self.n_train_samples) == 5) and (test_mean < 200)
+                flag |= (int(self.n_train_samples) == 6) and (test_mean < 190)
+            if self.loss_function == 'two_state':
+                flag |= (int(self.n_train_samples) == 1) and (test_mean > 330)
+                flag |= (int(self.n_train_samples) == 2) and (test_mean > 270)
+                flag |= (int(self.n_train_samples) == 3) and (test_mean > 250)
+                flag |= (int(self.n_train_samples) == 4) and (test_mean > 200)
+                flag |= (int(self.n_train_samples) == 5) and (test_mean > 180)
+                flag |= (int(self.n_train_samples) == 6) and (test_mean > 150)
+
+            if flag:
+                import shutil
+                shutil.rmtree(self.results_folder, ignore_errors=True)
+                return True
+
         if print_result:
             print(experiment_result)
         self._save_result()
+        return False
 
     def _save_result(self):
         """
@@ -389,14 +424,17 @@ class Model:
             "batch_size": self.batch_size,
             "learning_rate": self.learning_rate,
             "neurons": self.neurons,
+            "dropout": self.dropout_rate,
             "lambda": self.theta,
             "steepness_loss": self.steepness,
             "data_type": dataset.data_type,
-            "steepness": dataset.steepness,
+            "steepness_data": dataset.steepness,
             "n_train_samples": dataset.n_train_samples,
             "train_samples": [dataset.data_names[i] for i in dataset.train_indices],
             "lookback": dataset.lag,
-            "test_samples": dataset.test_samples
+            "test_samples": dataset.test_samples,
+            "tgds_ratio": self.tgds_ratio,
+            "loss_normalized": self.loss_normalized,
         }
         with open(self.results_folder + "config.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
