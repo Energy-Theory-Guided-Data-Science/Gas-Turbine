@@ -88,7 +88,8 @@ class Model:
         self.scaler = scaler
         self.n_train_samples = n_train_samples
         if results_folder is None:
-            self.results_folder = create_results_folder(data_type=data_type, approach=self.approach)
+            self.results_folder = create_results_folder(data_type=data_type, approach=self.approach,
+                                                        ex_name=self.ex_name)
         kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
@@ -157,7 +158,7 @@ class Model:
         self.model = model
 
     def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=False,
-              get_history=False):
+              get_history=False, check=False):
         """
         Train the model.
         :param x_train: The training data.
@@ -195,9 +196,10 @@ class Model:
                 callbacks=callbacks,
             )
         else:
-            config = {'loss_function': self.loss_function, 'theta': self.theta, 'train_size': self.n_train_samples}
-            check_outlier = CheckOutlier(validation_data=(x_val, y_val), scaler=self.scaler, config=config)
-            callbacks.append(check_outlier)
+            if check:
+                config = {'loss_function': self.loss_function, 'theta': self.theta, 'train_size': self.n_train_samples}
+                check_outlier = CheckOutlier(validation_data=(x_val, y_val), scaler=self.scaler, config=config)
+                callbacks.append(check_outlier)
 
             history = self.model.fit(
                 x_train,

@@ -5,7 +5,7 @@ import time
 import random
 
 
-def create_results_folder(data_type, approach):
+def create_results_folder(data_type, approach, ex_name):
     """
     Creates a folder for the results of the experiment. The folder is named after the current date and time.
     :param data_type: The type of data used for the experiment (e.g. "experiment" or "synthetic").
@@ -14,7 +14,7 @@ def create_results_folder(data_type, approach):
     """
     while True:
         folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
-        results_folder = f"Results/{approach}/" + folder_name
+        results_folder = f"Results/{ex_name}/{approach}/" + folder_name
         if not os.path.exists(results_folder):
             os.makedirs(results_folder)
             break
