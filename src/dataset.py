@@ -16,7 +16,7 @@ class Dataset:
     Class for data preprocessing.
     """
 
-    def __init__(self, data_type, n_train_samples, seed=42, steepness=None, test_samples=None):
+    def __init__(self, data_type, n_train_samples, seed=42, steepness=None, test_samples=None, train_pool=None):
         """
         Initialize the dataset.
         :param data_type: The type of data to use. Can be "synthetic" or "experiment".
@@ -26,6 +26,7 @@ class Dataset:
         """
         self.data_type = data_type
         self.seed = seed
+        self.train_pool = train_pool
         if self.data_type == "experiment":
             self.steepness = 6.388
         elif steepness is None:
@@ -60,6 +61,7 @@ class Dataset:
         self._get_lag(folder)
         np.random.seed(self.seed)
         self.train_indices = np.random.choice(range(100), self.n_train_samples, replace=False)
+        self.train_samples = [self.data_names[i] for i in self.train_indices]
         self.test_indices = [index for index, value in enumerate(self.data_names) if value in self.test_samples]
 
     def _get_experiment_data(self):
@@ -70,6 +72,8 @@ class Dataset:
         if not glob(folder):
             self._download_experiment_data(folder)
         self.data_names = ["1", "4", "9", "20", "21", "22", "23", "24"]
+        if self.train_pool is None:
+            self.train_pool = self.data_names.copy()
         self.data = [pd.read_csv(f"{folder}experiment_{ex}_short.csv", delimiter="|") for ex in self.data_names]
         # remove unimportant columns
         for i, data in enumerate(self.data):
@@ -80,9 +84,11 @@ class Dataset:
             self.data[i] = data
         self._get_scaler(folder)
         self._get_lag(folder)
-        indices = [index for index, value in enumerate(self.data_names) if value not in self.test_samples]
+        indices = [index for index, value in enumerate(self.data_names) if
+                   value not in self.test_samples and value in self.train_pool]
         np.random.seed(self.seed)
         self.train_indices = np.random.choice(indices, self.n_train_samples, replace=False)
+        self.train_samples = [self.data_names[i] for i in self.train_indices]
         self.test_indices = [index for index, value in enumerate(self.data_names) if value in self.test_samples]
 
     def _get_scaler(self, folder):
@@ -359,6 +365,7 @@ class Dataset:
         :param folder: The folder to save the data in.
         """
         print("Downloading data...")
+        os.makedirs(folder, exist_ok=True)
         path = folder[: folder[:-1].rfind("/") + 1]
         url = "https://bwsyncandshare.kit.edu/s/j7ExGsHaN2wFgWa/download"
         file_name = "data.zip"

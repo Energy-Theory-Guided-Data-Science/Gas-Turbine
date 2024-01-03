@@ -12,6 +12,7 @@ def create_results_folder(data_type, approach, ex_name):
     :param approach: The approach used for the experiment (e.g. "loss_function" or "data_baseline").
     :return: The path to the folder.
     """
+    time.sleep(random.randint(2, 60))
     while True:
         folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
         results_folder = f"Results/{ex_name}/{approach}/" + folder_name
@@ -19,7 +20,7 @@ def create_results_folder(data_type, approach, ex_name):
             os.makedirs(results_folder)
             break
         else:
-            time.sleep(random.randint(5, 10))
+            time.sleep(random.randint(2, 30))
     results_folder_images = results_folder + "Images/"
     os.makedirs(results_folder_images)
     results_folder_model = results_folder + "Model/"

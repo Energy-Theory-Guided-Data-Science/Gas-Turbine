@@ -5,10 +5,10 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import LossTwoState, LossTwoState2, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, \
-    LossMseDiff, LossDiffRange
+from src.loss_functions import LossTwoState, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, \
+    LossMseDiff, LossDiffRange, SoftLossTwoState, SoftWeightedLossTwoState
 from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, MetricLossTwoStateDiffRange, \
-    MetricLossRange, MetricLossMseDiff, MetricLossDiffRange
+    MetricLossRange, MetricLossMseDiff, MetricLossDiffRange, MetricSoftLossTwoState, MetricSoftWeightedLossTwoState
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
 from src.check_outlier import CheckOutlier
@@ -35,6 +35,7 @@ class Model:
                  learning_rate=0.001,
                  theta=0.5,
                  tgds_ratio=0.5,
+                 loss_tolerance=0,
                  loss_normalized=False,
                  batch_size=128,
                  gpu=0,
@@ -81,6 +82,7 @@ class Model:
         self.learning_rate = learning_rate
         self.theta = theta
         self.tgds_ratio = tgds_ratio
+        self.loss_tolerance = loss_tolerance
         self.loss_normalized = loss_normalized
         self.steepness = steepness
         self.batch_size = batch_size
@@ -112,7 +114,7 @@ class Model:
         metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
         if self.loss_function == "mean_squared_error":
             loss_func = "mean_squared_error"
-        elif self.loss_function == 'range':
+        elif self.loss_function == 'approximation':
             min_value, max_value = 0, 4000
             values_to_transform = [[min_value], [max_value]]
             scaled_values = scaler[1].transform(values_to_transform)
@@ -121,7 +123,7 @@ class Model:
             loss_func = LossRange(self.theta, scaled_min_value, scaled_max_value, self.loss_normalized)
             loss_metric = MetricLossRange(self.theta, scaled_min_value, scaled_max_value)
             metrics.append(loss_metric)
-        elif self.loss_function == 'diff_range':
+        elif self.loss_function == 'diff_approximation':
             min_value, max_value = -self.steepness, self.steepness
             values_to_transform = [[min_value], [max_value]]
             scaled_values = scaler[1].transform(values_to_transform)
@@ -139,15 +141,20 @@ class Model:
             loss_func = LossTwoState(self.theta, st, self.loss_normalized)
             loss_metric = MetricLossTwoState(self.theta, st)
             metrics.append(loss_metric)
-        elif self.loss_function == 'two_state_2':
-            st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoState2(self.theta, st, self.loss_normalized)
-            loss_metric = MetricLossTwoState(self.theta, st)
-            metrics.append(loss_metric)
         elif self.loss_function == 'weighted_two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
             loss_func = WeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_normalized)
             loss_metric = MetricWeightedLossTwoState(self.theta, st, self.tgds_ratio)
+            metrics.append(loss_metric)
+        elif self.loss_function == 'soft_two_state':
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = SoftLossTwoState(self.theta, st, self.loss_tolerance, self.loss_normalized)
+            loss_metric = MetricSoftLossTwoState(self.theta, st, self.loss_tolerance)
+            metrics.append(loss_metric)
+        elif self.loss_function == 'soft_weighted_two_state':
+            st = scaler[1].transform([[self.steepness]])[0][0]
+            loss_func = SoftWeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_tolerance, self.loss_normalized)
+            loss_metric = MetricSoftWeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_tolerance)
             metrics.append(loss_metric)
         elif self.loss_function == 'two_state_diff_range':
             st = scaler[1].transform([[self.steepness]])[0][0]
@@ -157,7 +164,7 @@ class Model:
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
 
-    def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=40, early_stopping=False,
+    def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=None, early_stopping=True,
               get_history=False, check=False):
         """
         Train the model.
@@ -171,6 +178,8 @@ class Model:
         self.epochs = epochs
         start_train = datetime.now()
         loss_batch_history = LossBatchHistory()
+        if patience is None:
+            patience = int(epochs * 0.3)
         es = EarlyStopping(
             monitor="val_loss", mode="min", verbose=self.verbose, patience=patience, restore_best_weights=True
         )
@@ -432,11 +441,12 @@ class Model:
             "data_type": dataset.data_type,
             "steepness_data": dataset.steepness,
             "n_train_samples": dataset.n_train_samples,
-            "train_samples": [dataset.data_names[i] for i in dataset.train_indices],
+            "train_samples": list(dataset.train_samples),
             "lookback": dataset.lag,
-            "test_samples": dataset.test_samples,
+            "test_samples": list(dataset.test_samples),
             "tgds_ratio": self.tgds_ratio,
             "loss_normalized": self.loss_normalized,
+            "loss_tolerance": self.loss_tolerance,
         }
         with open(self.results_folder + "config.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
