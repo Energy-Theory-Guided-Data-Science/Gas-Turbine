@@ -12,21 +12,21 @@ def create_results_folder(data_type, approach, ex_name):
     :param approach: The approach used for the experiment (e.g. "loss_function" or "data_baseline").
     :return: The path to the folder.
     """
-    time.sleep(random.randint(2, 60))
     while True:
         folder_name = f"type-{data_type}_date-" + time.strftime("%Y-%m-%d_%H-%M-%S/")
         results_folder = f"Results/{ex_name}/{approach}/" + folder_name
-        if not os.path.exists(results_folder):
+        try:
             os.makedirs(results_folder)
             break
-        else:
+        except FileExistsError:
             time.sleep(random.randint(2, 30))
-    results_folder_images = results_folder + "Images/"
-    os.makedirs(results_folder_images)
-    results_folder_model = results_folder + "Model/"
-    os.makedirs(results_folder_model)
-    results_folder_history = results_folder + "History/"
-    os.makedirs(results_folder_history)
+            continue
+
+    subdirectories = ["Images", "Model", "History"]
+    for subdirectory in subdirectories:
+        subdirectory_path = os.path.join(results_folder, subdirectory)
+        os.makedirs(subdirectory_path)
+
     return results_folder
 
 
