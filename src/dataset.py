@@ -23,6 +23,8 @@ class Dataset:
         :param n_train_samples: The number of samples to use for training.
         :param seed: The seed to use for the random number generator. Default is 42.
         :param steepness: The steepness of the transition part of the synthetic data.
+        :param test_samples: The samples to use for testing. If None, the default samples will be used.
+        :param train_pool: The samples to use for training. If None, all samples except the test samples will be used.
         """
         self.data_type = data_type
         self.seed = seed

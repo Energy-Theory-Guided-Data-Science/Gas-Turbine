@@ -5,13 +5,10 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import LossTwoState, WeightedLossTwoState, LossTwoStateDiffRange, LossRange, \
-    LossMseDiff, LossDiffRange, SoftLossTwoState, SoftWeightedLossTwoState
-from src.loss_metrics import MetricLossTwoState, MetricWeightedLossTwoState, MetricLossTwoStateDiffRange, \
-    MetricLossRange, MetricLossMseDiff, MetricLossDiffRange, MetricSoftLossTwoState, MetricSoftWeightedLossTwoState
+from src.loss_functions import SoftWeightedLossTwoState
+from src.loss_metrics import MetricSoftWeightedLossTwoState
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
-from src.check_outlier import CheckOutlier
 import sklearn.metrics
 import json
 import os
@@ -42,29 +39,33 @@ class Model:
                  verbose=True,
                  seed=42,
                  results_folder=None,
-                 dropout_rate=0.25,
+                 dropout_rate=0,
                  n_lstm_layers=3,
                  ex_name="Test"):
         """
         Initialize the model.
         :param data_type: The type of data used for the model (e.g. "experiment" or "synthetic").
+        :param n_train_samples: The number of training samples used for the model.
         :param loss_function: The loss function used for the model (e.g. "mean_squared_error" or "custom").
         The custom loss function consists of the mean squared error and the weighted physical part.
         :param scaler: The scaler used for the data.
-        :param steepness: The steepness domain knowledge of the loss function. Only used if loss_function is "custom".
+        :param steepness: The steepness domain knowledge used in the loss function.
         :param input_shape: The shape of the input vector.
         :param neurons: The number of neurons in the first hidden layer. Default is 16.
         :param learning_rate: The learning rate used for the model. Default is 0.001.
         :param theta: The lambda value (weight) of the domain knowledge part in the general loss function.
-        Only used if loss_function is "custom". Default is 100.
-        :param loss_normalized: If True, the loss parts are normalized using (1-theta) and theta weights. Default is False.
+        :param tgds_ratio: The ratio of different permissible states used in the loss function.
+        :param loss_tolerance: The tolerance used in the loss function.
+        :param loss_normalized: If True, the loss parts are normalized using (1-theta) and theta weights.
         :param batch_size: The batch size used for the model. Default is 8.
         :param gpu: The GPU ID used for the model. If set to -1, the CPU is used.
         :param verbose: If True, the training process is printed to the console.
         :param seed: The seed used for the model. Default is 42.
+        :param results_folder: The folder where the results are saved.
+        :param dropout_rate: The dropout rate used for the model.
+        :param n_lstm_layers: The number of LSTM layers used for the model.
         :param ex_name: The name of the experiment. Default is "Test".
         """
-        # tf.random.set_seed(seed)
         if gpu != -1:
             tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[gpu], True)
             tf.config.set_visible_devices(tf.config.list_physical_devices("GPU")[gpu], "GPU")
@@ -92,7 +93,6 @@ class Model:
         if results_folder is None:
             self.results_folder = create_results_folder(data_type=data_type, approach=self.approach,
                                                         ex_name=self.ex_name)
-        kernel_reg = regularizers.l2(0.05)
 
         model = Sequential()
         if self.n_lstm_layers == 1:
@@ -108,72 +108,34 @@ class Model:
         model.add(layers.Dense(self.neurons // 2, activation="relu"))
         model.add(layers.Dense(1, activation="linear"))
 
-        # opt = optimizers.Adagrad(learning_rate=self.learning_rate, clipnorm=1.0)
         opt = optimizers.Adam(learning_rate=self.learning_rate)
 
         metrics = [tf.metrics.RootMeanSquaredError(), tf.metrics.MeanSquaredError()]
+        loss_func = ""
         if self.loss_function == "mean_squared_error":
             loss_func = "mean_squared_error"
-        elif self.loss_function == 'approximation':
-            min_value, max_value = 0, 4000
-            values_to_transform = [[min_value], [max_value]]
-            scaled_values = scaler[1].transform(values_to_transform)
-            scaled_min_value = scaled_values[0][0]
-            scaled_max_value = scaled_values[1][0]
-            loss_func = LossRange(self.theta, scaled_min_value, scaled_max_value, self.loss_normalized)
-            loss_metric = MetricLossRange(self.theta, scaled_min_value, scaled_max_value)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'diff_approximation':
-            min_value, max_value = -self.steepness, self.steepness
-            values_to_transform = [[min_value], [max_value]]
-            scaled_values = scaler[1].transform(values_to_transform)
-            scaled_min_value = scaled_values[0][0]
-            scaled_max_value = scaled_values[1][0]
-            loss_func = LossDiffRange(self.theta, scaled_min_value, scaled_max_value, self.loss_normalized)
-            loss_metric = MetricLossDiffRange(self.theta, scaled_min_value, scaled_max_value)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'mse_diff':
-            loss_func = LossMseDiff(self.theta, self.loss_normalized)
-            loss_metric = MetricLossMseDiff(self.theta)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'two_state':
-            st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoState(self.theta, st, self.loss_normalized)
-            loss_metric = MetricLossTwoState(self.theta, st)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'weighted_two_state':
-            st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = WeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_normalized)
-            loss_metric = MetricWeightedLossTwoState(self.theta, st, self.tgds_ratio)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'soft_two_state':
-            st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = SoftLossTwoState(self.theta, st, self.loss_tolerance, self.loss_normalized)
-            loss_metric = MetricSoftLossTwoState(self.theta, st, self.loss_tolerance)
-            metrics.append(loss_metric)
         elif self.loss_function == 'soft_weighted_two_state':
             st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = SoftWeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_tolerance, self.loss_normalized)
+            loss_func = SoftWeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_tolerance,
+                                                 self.loss_normalized)
             loss_metric = MetricSoftWeightedLossTwoState(self.theta, st, self.tgds_ratio, self.loss_tolerance)
-            metrics.append(loss_metric)
-        elif self.loss_function == 'two_state_diff_range':
-            st = scaler[1].transform([[self.steepness]])[0][0]
-            loss_func = LossTwoStateDiffRange(self.theta, st, self.tgds_ratio, self.loss_normalized)
-            loss_metric = MetricLossTwoStateDiffRange(self.theta, st, self.tgds_ratio)
             metrics.append(loss_metric)
         model.compile(loss=loss_func, optimizer=opt, metrics=metrics)
         self.model = model
 
     def train(self, x_train, y_train, epochs, x_val=None, y_val=None, val_frac=0.1, patience=None, early_stopping=True,
-              get_history=False, check=False):
+              get_history=False):
         """
         Train the model.
         :param x_train: The training data.
         :param y_train: The training labels.
         :param epochs: The number of epochs used for the training.
+        :param x_val: The validation data.
+        :param y_val: The validation labels.
         :param val_frac: The fraction of the training data used for validation. Default is 0.1.
-        :param patience: The number of epochs without improvement after which the training is stopped. Default is 40.
-        :param early_stopping: If True, early stopping is used. Default is True.
+        :param patience: The number of epochs without improvement after which the training is stopped.
+        :param early_stopping: If True, early stopping is used.
+        :param get_history: If True, the training history is returned.
         """
         self.epochs = epochs
         start_train = datetime.now()
@@ -205,11 +167,6 @@ class Model:
                 callbacks=callbacks,
             )
         else:
-            if check:
-                config = {'loss_function': self.loss_function, 'theta': self.theta, 'train_size': self.n_train_samples}
-                check_outlier = CheckOutlier(validation_data=(x_val, y_val), scaler=self.scaler, config=config)
-                callbacks.append(check_outlier)
-
             history = self.model.fit(
                 x_train,
                 y_train,
@@ -273,10 +230,12 @@ class Model:
         def create_predictions(dataset_type, data, index):
             results = pd.DataFrame(index=index, columns=["mse", "rmse", "r2", "mae", "maxae", "mape"])
             for i in range(len(data)):
+                start_time = datetime.now()
                 x_test, _ = dataset.transform_sample(data[i], make_3d=True)
                 preds_scaled = self.model.predict(x_test)
                 preds = dataset.scaler[1].inverse_transform(preds_scaled)
                 preds = np.array([i[0] for i in preds])
+                dur_predict = datetime.now() - start_time
 
                 create_prediction_plot(
                     data[i]["time"],
@@ -304,6 +263,7 @@ class Model:
                 results.at[index[i], "mae"] = results_ex["MAE"]
                 results.at[index[i], "maxae"] = results_ex["MaxAE"]
                 results.at[index[i], "mape"] = results_ex["MAPE"]
+                results.at[index[i], "inference_time"] = str(dur_predict)
 
             results = results.reset_index().rename(columns={'index': 'sample_name'})
             results.to_csv(self.results_folder + "results_" + dataset_type + ".csv", index=False)
@@ -347,7 +307,7 @@ class Model:
         results["MaxAE"] = maxae
         return results
 
-    def get_result(self, print_result=False, check=False):
+    def get_result(self, print_result=False):
         """
         Get the results of the prediction. The results are saved in the results folder and printed to the console.
         """
@@ -375,29 +335,6 @@ class Model:
         # experiment_result += "\nTraining Time: " + str(self.dur_train)
         # experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
-        if check:
-            flag = False
-
-            if self.loss_function == 'mean_squared_error':
-                flag |= (int(self.n_train_samples) == 1) and (test_mean < 335)
-                flag |= (int(self.n_train_samples) == 2) and (test_mean < 280)
-                flag |= (int(self.n_train_samples) == 3) and (test_mean < 260)
-                flag |= (int(self.n_train_samples) == 4) and (test_mean < 220)
-                flag |= (int(self.n_train_samples) == 5) and (test_mean < 200)
-                flag |= (int(self.n_train_samples) == 6) and (test_mean < 190)
-            if self.loss_function == 'two_state':
-                flag |= (int(self.n_train_samples) == 1) and (test_mean > 330)
-                flag |= (int(self.n_train_samples) == 2) and (test_mean > 270)
-                flag |= (int(self.n_train_samples) == 3) and (test_mean > 250)
-                flag |= (int(self.n_train_samples) == 4) and (test_mean > 200)
-                flag |= (int(self.n_train_samples) == 5) and (test_mean > 180)
-                flag |= (int(self.n_train_samples) == 6) and (test_mean > 150)
-
-            if flag:
-                import shutil
-                shutil.rmtree(self.results_folder, ignore_errors=True)
-                return True
-
         if print_result:
             print(experiment_result)
         self._save_result()
@@ -409,7 +346,7 @@ class Model:
         """
         result = {
             # "best_epoch": int(self.best_epoch),
-            # "train_time": str(self.dur_train),
+            "train_time": str(self.dur_train),
             # "predict_time": str(self.dur_predict),
             "train_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
             "train_rmse_std": round(np.std(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
