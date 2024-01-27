@@ -5,8 +5,8 @@ from tensorflow.keras import layers, optimizers, regularizers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN, ModelCheckpoint
 from src.loss_batch_history import LossBatchHistory
-from src.loss_functions import SoftWeightedLossTwoState
-from src.loss_metrics import MetricSoftWeightedLossTwoState
+from src.loss_function import SoftWeightedLossTwoState
+from src.loss_metric import MetricSoftWeightedLossTwoState
 import pandas as pd
 from src.utils import create_prediction_plot, create_results_folder
 import sklearn.metrics
@@ -331,21 +331,20 @@ class Model:
         test_std = round(np.std(delete_best_worst(results_test["rmse"])), 3)
         experiment_result += "\nRMSE (over all test samples): " + str(test_mean) + " ±(" + str(test_std) + ")"
 
-        # experiment_result += "\nBest Epoch: " + str(self.best_epoch)
-        # experiment_result += "\nTraining Time: " + str(self.dur_train)
+        experiment_result += "\nBest Epoch: " + str(self.best_epoch)
+        experiment_result += "\nTraining Time: " + str(self.dur_train)
         # experiment_result += "\nPrediction Time: " + str(self.dur_predict)
 
         if print_result:
             print(experiment_result)
         self._save_result()
-        return False
 
     def _save_result(self):
         """
         Save the results of the experiment in a json file.
         """
         result = {
-            # "best_epoch": int(self.best_epoch),
+            "best_epoch": int(self.best_epoch),
             "train_time": str(self.dur_train),
             # "predict_time": str(self.dur_predict),
             "train_rmse_mean": round(np.mean(pd.read_csv(self.results_folder + "results_train.csv")["rmse"]), 3),
