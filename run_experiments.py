@@ -57,7 +57,8 @@ tgds_ratios = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
 train_sizes = [1, 2, 3, 4, 5, 6]
 losses = ['mean_squared_error', 'soft_weighted_two_state']
 loss_tolerances = [0, 0.01, 0.1]
-incorrect_steepnesses = [6.388 / 100, 6.388 / 2, 6.388, 6.388 * 2, 6.388 * 100]
+incorrect_steepnesses = [6.388 / 128, 6.388 / 64, 6.388 / 32, 6.388 / 16, 6.388 / 8, 6.388 / 4, 6.388 / 2, 6.388, 6.388 * 2, 6.388 * 4, 6.388 * 8, 6.388 * 16, 6.388 * 32, 6.388 * 64, 6.388 * 128]
+approximation_tolerance = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 
 configs = []
 for run in range(5):
@@ -71,6 +72,16 @@ for run in range(5):
             'steepness': st,
             'ex_name': 'incorrect_prior_knowledge'
         })
+        
+    # Experiment configurations for approximation tolerance of prior knowledge.
+    for at in approximation_tolerance:
+        configs.append({
+            'run': run,
+            'train_size': 4,
+            'loss': 'soft_weighted_two_state',
+            'loss_tolerance': at,
+            'ex_name': 'approximation_prior_knowledge'
+        })        
 
     # Experiment configurations for different training sizes and loss tolerances.
     for train_size in train_sizes:
