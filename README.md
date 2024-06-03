@@ -33,7 +33,7 @@ conda env create - f env.yml
 - `src/model.py`: LSTM for gas turbine simulation.
 - `src/loss_functions.py`: Custom loss function incorporating knowledge-guided constraints.
 - `src/utils.py`: Utility functions supporting data handling and model operations.
--  'data' : Place the csv files with experimental data there. You can find the data [here](https://doi.org/10.35097/sLJiahifxvfDKMEc). 
+- `data` : Place the csv files with experimental data there. You can find the data [here](https://doi.org/10.35097/sLJiahifxvfDKMEc). 
 
 ## Key Features
 
