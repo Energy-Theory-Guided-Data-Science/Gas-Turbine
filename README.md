@@ -37,6 +37,6 @@ conda env create - f env.yml
 
 ## Key Features
 
-- **Comprehensive Experiment Suite**: Script (`run_experiments.py`) to reproduce experiments from the paper.
-- **Organizing results**: Jupyter notebook `Collect_Results.ipynb' to collect experimental results to one pandas dataframe.
+- **Run experiments**: Run `run_experiments.py` to reproduce experiments from the paper.
+- **Organiye results**: Jupyter notebook `Collect_Results.ipynb` to collect experimental results to one pandas dataframe.
 - **Visualize Results**: The experimental results, including the code used to create the figures and the figures themselves, can be found [here](https://doi.org/10.35097/sLJiahifxvfDKMEc).
