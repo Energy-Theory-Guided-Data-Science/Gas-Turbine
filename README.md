@@ -10,9 +10,14 @@ Published in the 15th ACM International Conference on Future Energy Systems (e-E
 
 [Read the paper on ACM Digital Library](https://dl.acm.org/doi/10.1145/3632775.3661967)
 
+[Watch the conference presentation video](https://www.youtube.com/watch?v=kG1HU2kaaMw&list=PLn0nrSd4xjjbw168up-HQ6ckv6AOczEii&index=9&ab_channel=AssociationforComputingMachinery%28ACM%29), which explains our approach using simple, easy-to-understand toy examples.
+
 For the dataset and experimental results, including the code used to create the figures and the figures themselves, please refer to:
 
+[Dataset on the UCI ML Repository](https://archive.ics.uci.edu/dataset/994/micro+gas+turbine+electrical+energy+prediction)
+
 [Dataset and Experimental Results](https://doi.org/10.35097/sLJiahifxvfDKMEc)
+
 
 ### Project Focus
 
